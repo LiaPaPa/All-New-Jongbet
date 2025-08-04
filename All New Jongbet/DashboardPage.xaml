@@ -1,0 +1,174 @@
+﻿<Page x:Class="All_New_Jongbet.DashboardPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+      xmlns:lvc="clr-namespace:LiveCharts.Wpf;assembly=LiveCharts.Wpf"
+      mc:Ignorable="d" 
+      d:DesignHeight="700" d:DesignWidth="1000"
+      Title="DashboardPage" Background="#f0fdf4">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <Border Padding="40,25,40,15">
+                <TextBlock Text="Dashboard" Foreground="#32325d" FontSize="28" FontWeight="Bold"/>
+            </Border>
+            <Rectangle Height="5" Fill="#5e72e4" RadiusX="2.5" RadiusY="2.5" Margin="40,0,40,25"/>
+            <Grid Margin="30,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition/>
+                    <ColumnDefinition/>
+                    <ColumnDefinition/>
+                    <ColumnDefinition/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Style="{StaticResource KPICard}" Margin="10">
+                    <StackPanel>
+                        <TextBlock Text="TOTAL ASSETS" Style="{StaticResource CardTitle}"/>
+                        <TextBlock Text="{Binding TotalAssetText}" Style="{StaticResource CardValue}"/>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="1" Style="{StaticResource KPICard}" Margin="10">
+                    <StackPanel>
+                        <TextBlock Text="TOTAL P/L" Style="{StaticResource CardTitle}"/>
+                        <TextBlock Text="{Binding TotalProfitLossText}" Style="{StaticResource CardValue}" Foreground="{Binding ProfitLossColor}"/>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="2" Style="{StaticResource KPICard}" Margin="10">
+                    <StackPanel>
+                        <TextBlock Text="DAILY CHANGE" Style="{StaticResource CardTitle}"/>
+                        <TextBlock Text="{Binding DailyChangeText}" Style="{StaticResource CardValue}" Foreground="{Binding DailyChangeColor}"/>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="3" Style="{StaticResource KPICard}" Margin="10">
+                    <StackPanel>
+                        <TextBlock Text="DAILY CHANGE (%)" Style="{StaticResource CardTitle}"/>
+                        <TextBlock Text="{Binding DailyChangeRateText}" Style="{StaticResource CardValue}" Foreground="{Binding DailyChangeColor}"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,10,0,0">
+            <StackPanel Margin="0,0,0,30">
+                <Grid Margin="30,20">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2*"/>
+                        <ColumnDefinition Width="1*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Style="{StaticResource KPICard}" Margin="10">
+                        <StackPanel>
+                            <Grid>
+                                <TextBlock Text="Asset Trend" Style="{StaticResource CardTitle}" FontSize="16" Foreground="#32325d" VerticalAlignment="Center"/>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <ToggleButton x:Name="Btn1m" Content="1m" Style="{StaticResource PeriodButtonStyle}" IsChecked="True" Click="PeriodButton_Click"/>
+                                    <ToggleButton x:Name="Btn3m" Content="3m" Style="{StaticResource PeriodButtonStyle}" Click="PeriodButton_Click"/>
+                                    <ToggleButton x:Name="Btn6m" Content="6m" Style="{StaticResource PeriodButtonStyle}" Click="PeriodButton_Click"/>
+                                </StackPanel>
+                            </Grid>
+                            <lvc:CartesianChart Series="{Binding SeriesCollection}" LegendLocation="None" Height="250" Margin="0,10,0,0">
+                                <lvc:CartesianChart.AxisX>
+                                    <lvc:Axis Labels="{Binding Labels}"/>
+                                </lvc:CartesianChart.AxisX>
+                                <lvc:CartesianChart.AxisY>
+                                    <lvc:Axis Title="Assets" LabelFormatter="{Binding YFormatter}">
+                                        <lvc:Axis.Separator>
+                                            <lvc:Separator Stroke="Black" StrokeThickness="0.5" StrokeDashArray="2 2"/>
+                                        </lvc:Axis.Separator>
+                                    </lvc:Axis>
+                                    <lvc:Axis Title="Profit(%)" Position="RightTop" ShowLabels="True"/>
+                                </lvc:CartesianChart.AxisY>
+                            </lvc:CartesianChart>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- CHANGED: Portfolio -> Order Que -->
+                    <Border Grid.Column="1" Style="{StaticResource KPICard}" Margin="10">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid Grid.Row="0" Margin="0,0,0,10">
+                                <TextBlock Text="Order Que" Style="{StaticResource CardTitle}" FontSize="16" Foreground="#32325d" VerticalAlignment="Center"/>
+                                <Border Background="#e9ecef" CornerRadius="10" Padding="8,3" HorizontalAlignment="Right">
+                                    <TextBlock Text="{Binding OrderQueList.Count}" FontWeight="Bold" Foreground="#525f7f"/>
+                                </Border>
+                            </Grid>
+
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding OrderQueList}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{Binding CardBrushKey, Converter={StaticResource StyleConverter}}" CornerRadius="4" Padding="10" Margin="0,0,0,8">
+                                                <StackPanel>
+                                                    <Grid>
+                                                        <TextBlock Text="{Binding OrderTypeDisplay}" FontWeight="Bold" FontSize="14"/>
+                                                        <TextBlock Text="{Binding StockName}" HorizontalAlignment="Right" FontWeight="SemiBold"/>
+                                                    </Grid>
+                                                    <TextBlock Text="{Binding StockCode}" Foreground="Gray" FontSize="11" Margin="0,3,0,0"/>
+                                                    <TextBlock Margin="0,5,0,0">
+                                        <Run Text="{Binding OrderPrice, StringFormat=N0}"/>
+                                        <Run Text="원 / "/>
+                                        <Run Text="{Binding UnfilledQuantity, StringFormat=N0}"/>
+                                        <Run Text="주"/>
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+                </Grid>
+                <Border Style="{StaticResource KPICard}" Margin="40,10">
+                    <StackPanel>
+                        <TextBlock Text="Holdings" Style="{StaticResource CardTitle}" FontSize="16" Foreground="#32325d"/>
+
+                        <DataGrid ItemsSource="{Binding AllHoldings}">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Account" Binding="{Binding AccountNumber}" Width="*" CellStyle="{StaticResource CenterAlignedCellStyle}"/>
+                                <DataGridTextColumn Header="Code" Binding="{Binding StockCode}" Width="Auto" CellStyle="{StaticResource CenterAlignedCellStyle}"/>
+                                <DataGridTextColumn Header="Name" Binding="{Binding StockName}" Width="1.5*"/>
+                                <DataGridTextColumn Header="P/L" Binding="{Binding EvaluationProfitLoss, StringFormat=N0}" Width="*" CellStyle="{StaticResource RightAlignedCellStyle}">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{Binding EvaluationProfitLoss, Converter={StaticResource ProfitLossColorConv}}"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="Return (%)" Binding="{Binding ProfitRate, StringFormat={}{0:F2}}" Width="Auto" CellStyle="{StaticResource RightAlignedCellStyle}">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{Binding ProfitRate, Converter={StaticResource ProfitLossColorConv}}"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="Avg. Price" Binding="{Binding PurchasePrice, StringFormat=N0}" Width="*" CellStyle="{StaticResource RightAlignedCellStyle}"/>
+                                <DataGridTextColumn Header="Price" Binding="{Binding CurrentPrice, StringFormat=N0}" Width="*" CellStyle="{StaticResource RightAlignedCellStyle}"/>
+                                <DataGridTextColumn Header="Change (%)" Binding="{Binding DailyFluctuationRate, StringFormat={}{0:F2}}" Width="Auto" CellStyle="{StaticResource RightAlignedCellStyle}">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{Binding DailyFluctuationRate, Converter={StaticResource ProfitLossColorConv}}"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="Tradable" Binding="{Binding TradableQuantity, StringFormat=N0}" Width="Auto" CellStyle="{StaticResource CenterAlignedCellStyle}"/>
+                                <DataGridTextColumn Header="Qty" Binding="{Binding HoldingQuantity, StringFormat=N0}" Width="Auto" CellStyle="{StaticResource CenterAlignedCellStyle}"/>
+                                <DataGridTextColumn Header="Evaluation" Binding="{Binding EvaluationAmount, StringFormat=N0}" Width="1.2*" CellStyle="{StaticResource RightAlignedCellStyle}"/>
+                                <DataGridTextColumn Header="Amount" Binding="{Binding PurchaseAmount, StringFormat=N0}" Width="1.2*" CellStyle="{StaticResource RightAlignedCellStyle}"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>

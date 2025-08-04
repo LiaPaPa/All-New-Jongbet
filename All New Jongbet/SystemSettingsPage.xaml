@@ -1,0 +1,88 @@
+﻿<Page x:Class="All_New_Jongbet.SystemSettingsPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+      mc:Ignorable="d"
+      d:DesignHeight="700" d:DesignWidth="1000"
+      Title="SystemSettingsPage" Background="#f0fdf4">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <Border Padding="40,25,40,15">
+                <TextBlock Text="Strategy Setup" Foreground="#32325d" FontSize="28" FontWeight="Bold"/>
+            </Border>
+            <Rectangle Height="5" Fill="#5e72e4" RadiusX="2.5" RadiusY="2.5" Margin="40,0,40,25"/>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="40,0,40,30">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Style="{StaticResource KPICard}" Margin="0,0,10,0">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,10">
+                                <TextBlock Text="Manage Accounts" Style="{StaticResource CardTitle}" FontSize="16" Foreground="#32325d" VerticalAlignment="Center"/>
+                                <Button Content="Register Account" Style="{StaticResource SecondaryActionButton}" HorizontalAlignment="Right" Click="RegisterAccount_Click"/>
+                            </Grid>
+                            <DataGrid x:Name="AccountsDataGrid" Height="156" SelectionMode="Single" SelectionChanged="DataGrid_SelectionChanged">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Account" Binding="{Binding AccountNumber}" Width="*" CellStyle="{StaticResource CenterAlignedCellStyle}"/>
+                                    <DataGridTextColumn Header="Status" Binding="{Binding TokenStatus}" Width="100" CellStyle="{StaticResource CenterAlignedCellStyle}"/>
+                                    <DataGridTextColumn Header="Token" Binding="{Binding Token}" Width="2*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="1" Style="{StaticResource KPICard}" Margin="10,0,0,0">
+                        <StackPanel>
+                            <TextBlock Text="Manage Conditions" Style="{StaticResource CardTitle}" FontSize="16" Foreground="#32325d"/>
+                            <DataGrid x:Name="ConditionsDataGrid" Height="156" SelectionMode="Single" Margin="0,10,0,0" SelectionChanged="DataGrid_SelectionChanged">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="No" Binding="{Binding Index}" Width="50"/>
+                                    <DataGridTextColumn Header="Condition Name" Binding="{Binding Name}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <Button x:Name="AddStrategyButton" Content="Add Strategy" Style="{StaticResource PrimaryActionButton}" HorizontalAlignment="Center" Margin="0,20" Click="AddStrategy_Click" IsEnabled="False"/>
+
+                <!--테스트용 버튼-->
+                <!--<Button Content="Run Rate Limit Test" Style="{StaticResource SecondaryActionButton}" HorizontalAlignment="Center" Margin="0,5,0,20" Click="RunTest_Click"/>-->
+
+                    <Border Style="{StaticResource KPICard}" Margin="0,0,0,10">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,10">
+                            <TextBlock Text="Strategy Matching" Style="{StaticResource CardTitle}" FontSize="16" Foreground="#32325d" VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button x:Name="SaveStrategyButton" Content="Save Strategy" Style="{StaticResource SecondaryActionButton}" Click="SaveStrategy_Click" IsEnabled="False"/>
+                                <Button x:Name="DeleteStrategyButton" Content="Delete Strategy" Style="{StaticResource SecondaryActionButton}" Margin="10,0,0,0" Click="DeleteStrategy_Click" IsEnabled="False"/>
+                            </StackPanel>
+                        </Grid>
+                        <DataGrid x:Name="StrategyMatchingDataGrid" ItemsSource="{Binding StrategyList}" SelectionMode="Single" SelectionChanged="DataGrid_SelectionChanged">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="No" Binding="{Binding StrategyNumber}" Width="50" CellStyle="{StaticResource CenterAlignedCellStyle}"/>
+                                <DataGridTextColumn Header="Account" Binding="{Binding AccountNumber}" Width="*" CellStyle="{StaticResource CenterAlignedCellStyle}"/>
+                                <DataGridTextColumn Header="C/No" Binding="{Binding ConditionIndex}" Width="60" CellStyle="{StaticResource CenterAlignedCellStyle}"/>
+                                <DataGridTextColumn Header="Condition Name" Binding="{Binding ConditionName}" Width="2*"/>
+                                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100" CellStyle="{StaticResource StatusCellStyle}"/>
+                                <DataGridTextColumn Header="Created Date" Binding="{Binding CreationDate}" Width="150" CellStyle="{StaticResource CenterAlignedCellStyle}"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>

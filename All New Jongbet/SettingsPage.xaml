@@ -1,0 +1,17 @@
+﻿<Page x:Class="All_New_Jongbet.SettingsPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+      mc:Ignorable="d" 
+      d:DesignHeight="700" d:DesignWidth="1000"
+      Title="SettingsPage" Background="#f0fdf4">
+    <Grid>
+        <StackPanel>
+            <Border Padding="40,25,40,15">
+                <TextBlock Text="Settings" Foreground="#32325d" FontSize="28" FontWeight="Bold"/>
+            </Border>
+            <Rectangle Height="5" Fill="#5e72e4" RadiusX="2.5" RadiusY="2.5" Margin="40,0,40,25"/>
+        </StackPanel>
+    </Grid>
+</Page>
