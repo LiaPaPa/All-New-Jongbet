@@ -5,7 +5,6 @@
              StartupUri="MainWindow.xaml">
     <Application.Resources>
 
-        <!-- NEW: TradeSetup 페이지 전용 컨트롤 스타일 -->
         <Style x:Key="SettingLabelStyleL1" TargetType="StackPanel">
             <Setter Property="Orientation" Value="Horizontal"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
@@ -87,9 +86,8 @@
                 </Setter.Value>
             </Setter>
         </Style>
-        
-        
-        <!-- Sidebar ToggleButton Style -->
+
+
         <Style TargetType="ToggleButton" x:Key="SidebarButton">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="#525f7f"/>
@@ -129,7 +127,6 @@
             </Setter>
         </Style>
 
-        <!-- Sidebar Expander Style -->
         <Style x:Key="SidebarExpanderStyle" TargetType="Expander">
             <Setter Property="Foreground" Value="#525f7f"/>
             <Setter Property="FontSize" Value="14"/>
@@ -185,7 +182,6 @@
             </Setter>
         </Style>
 
-        <!-- Sidebar Footer Button Style -->
         <Style x:Key="SidebarFooterButton" TargetType="Button">
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Foreground" Value="#8898aa"/>
@@ -217,7 +213,6 @@
             </Setter>
         </Style>
 
-        <!-- Card Style -->
         <Style x:Key="KPICard" TargetType="Border">
             <Setter Property="Background" Value="White"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -230,7 +225,6 @@
             </Setter>
         </Style>
 
-        <!-- Text Styles -->
         <Style x:Key="CardTitle" TargetType="TextBlock">
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
@@ -251,7 +245,6 @@
             <Setter Property="Foreground" Value="#f5365c"/>
         </Style>
 
-        <!-- Notification Label Styles -->
         <Style x:Key="RoundedRectLabelStyle" TargetType="Label">
             <Setter Property="Padding" Value="15,6"/>
             <Setter Property="FontSize" Value="12"/>
@@ -297,7 +290,6 @@
             <Setter Property="Foreground" Value="#1976d2"/>
         </Style>
 
-        <!-- ScrollBar Styles -->
         <Style x:Key="ScrollBarThumb" TargetType="{x:Type Thumb}">
             <Setter Property="OverridesDefaultStyle" Value="true"/>
             <Setter Property="IsTabStop" Value="false"/>
@@ -338,7 +330,6 @@
             </Setter>
         </Style>
 
-        <!-- Action Button Styles -->
         <Style x:Key="PrimaryActionButton" TargetType="Button">
             <Setter Property="Background" Value="#5e72e4"/>
             <Setter Property="Foreground" Value="White"/>
@@ -404,7 +395,6 @@
             </Setter>
         </Style>
 
-        <!-- DataGrid Styles -->
         <Style TargetType="DataGrid">
             <Setter Property="AutoGenerateColumns" Value="False"/>
             <Setter Property="IsReadOnly" Value="True"/>
@@ -463,9 +453,8 @@
 
         <local:ProfitLossColorConverter x:Key="ProfitLossColorConv"/>
 
-        <SolidColorBrush x:Key="BuyOrderStatusBrush" Color="#ef9a9a"/>
-        <SolidColorBrush x:Key="SellOrderStatusBrush" Color="#90caf9"/>
-
+        <SolidColorBrush x:Key="BuyOrderStatusBrush" Color="#D32F2F"/>
+        <SolidColorBrush x:Key="SellOrderStatusBrush" Color="#1976D2"/>
         <Style x:Key="OrderLogItemStyle" TargetType="Border">
             <Setter Property="Background" Value="White"/>
             <Setter Property="BorderThickness" Value="3,0,0,0"/>
@@ -476,11 +465,9 @@
 
         <local:StyleNameToStyleConverter x:Key="StyleConverter"/>
 
-        <!-- NEW: Order Que 카드 배경색 브러시 -->
-        <SolidColorBrush x:Key="BuyOrderCardBrush" Color="#ffebee"/>
-        <SolidColorBrush x:Key="SellOrderCardBrush" Color="#e3f2fd"/>
-        <SolidColorBrush x:Key="CancelOrderCardBrush" Color="#f5f5f5"/>
-
-        
+        <SolidColorBrush x:Key="BuyOrderCardBrush" Color="#D32F2F"/>
+        <SolidColorBrush x:Key="SellOrderCardBrush" Color="#1976D2"/>
+        <SolidColorBrush x:Key="CancelOrderCardBrush" Color="#FFC107"/>
+        <SolidColorBrush x:Key="DefaultOrderCardBrush" Color="#BDBDBD"/>
     </Application.Resources>
 </Application>

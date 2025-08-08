@@ -86,6 +86,7 @@
     <Compile Include="StockData.cs" />
     <Compile Include="StockItem.cs" />
     <Compile Include="StrategyInfo.cs" />
+    <Compile Include="StrategyRepository.cs" />
     <Compile Include="StyleNameToStyleConverter.cs" />
     <Compile Include="SystemSettingsPage.xaml.cs">
       <DependentUpon>SystemSettingsPage.xaml</DependentUpon>

@@ -46,7 +46,7 @@
                         <StackPanel>
                             <Grid Margin="0,0,0,10">
                                 <TextBlock Text="Buy Settings" Style="{StaticResource CardTitle}" FontSize="16" Foreground="#32325d" VerticalAlignment="Center"/>
-                                <Button Content="Save" Style="{StaticResource SecondaryActionButton}" HorizontalAlignment="Right" Click="SaveSettings_Click"/>
+                                <Button Content="Save" Style="{StaticResource SecondaryActionButton}" HorizontalAlignment="Right" Click="SaveButton_Click"/>
                             </Grid>
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -112,7 +112,7 @@
                         <StackPanel>
                             <Grid Margin="0,0,0,10">
                                 <TextBlock Text="Sell Settings" Style="{StaticResource CardTitle}" FontSize="16" Foreground="#32325d" VerticalAlignment="Center"/>
-                                <Button Content="Save" Style="{StaticResource SecondaryActionButton}" HorizontalAlignment="Right" Click="SaveSettings_Click"/>
+                                <Button Content="Save" Style="{StaticResource SecondaryActionButton}" HorizontalAlignment="Right" Click="SaveButton_Click"/>
                             </Grid>
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -254,7 +254,11 @@
                                     <TextBox Grid.Column="2" Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.ReboundCutAmount}"/>
                                 </Grid>
                             </Grid>
+
+                            <Button Content="Run Order Test" Style="{StaticResource SecondaryActionButton}" HorizontalAlignment="Right" VerticalAlignment="Top" Click="RunOrderTest_Click" Margin="20,0,0,0"/>
+
                         </StackPanel>
+                        
                     </Border>
                 </StackPanel>
             </ScrollViewer>
