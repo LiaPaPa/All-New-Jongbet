@@ -62,8 +62,13 @@
                     </Grid.ColumnDefinitions>
 
                     <Border Grid.Column="0" Style="{StaticResource KPICard}" Margin="10">
-                        <StackPanel>
-                            <Grid>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid Grid.Row="0">
                                 <TextBlock Text="Asset Trend" Style="{StaticResource CardTitle}" FontSize="16" Foreground="#32325d" VerticalAlignment="Center"/>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                     <ToggleButton x:Name="Btn1m" Content="1m" Style="{StaticResource PeriodButtonStyle}" IsChecked="True" Click="PeriodButton_Click"/>
@@ -71,23 +76,23 @@
                                     <ToggleButton x:Name="Btn6m" Content="6m" Style="{StaticResource PeriodButtonStyle}" Click="PeriodButton_Click"/>
                                 </StackPanel>
                             </Grid>
-                            <lvc:CartesianChart Series="{Binding SeriesCollection}" LegendLocation="None" Height="250" Margin="0,10,0,0">
+
+                            <lvc:CartesianChart Grid.Row="1" Series="{Binding SeriesCollection}" LegendLocation="None" Height="250" Margin="0,15,0,-10">
                                 <lvc:CartesianChart.AxisX>
                                     <lvc:Axis Labels="{Binding Labels}"/>
                                 </lvc:CartesianChart.AxisX>
                                 <lvc:CartesianChart.AxisY>
                                     <lvc:Axis Title="Assets" LabelFormatter="{Binding YFormatter}">
                                         <lvc:Axis.Separator>
-                                            <lvc:Separator Stroke="Black" StrokeThickness="0.5" StrokeDashArray="2 2"/>
+                                            <lvc:Separator Stroke="#f1f1f1" StrokeThickness="1"/>
                                         </lvc:Axis.Separator>
                                     </lvc:Axis>
                                     <lvc:Axis Title="Profit(%)" Position="RightTop" ShowLabels="True"/>
                                 </lvc:CartesianChart.AxisY>
                             </lvc:CartesianChart>
-                        </StackPanel>
+                        </Grid>
                     </Border>
 
-                    <!-- CHANGED: Portfolio -> Order Que -->
                     <Border Grid.Column="1" Style="{StaticResource KPICard}" Margin="10">
                         <Grid>
                             <Grid.RowDefinitions>
@@ -95,31 +100,56 @@
                                 <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
 
-                            <Grid Grid.Row="0" Margin="0,0,0,10">
-                                <TextBlock Text="Order Que" Style="{StaticResource CardTitle}" FontSize="16" Foreground="#32325d" VerticalAlignment="Center"/>
+                            <Grid Grid.Row="0">
+                                <TextBlock Text="Today's Orders" Style="{StaticResource CardTitle}" FontSize="16" Foreground="#32325d" VerticalAlignment="Center"/>
                                 <Border Background="#e9ecef" CornerRadius="10" Padding="8,3" HorizontalAlignment="Right">
                                     <TextBlock Text="{Binding OrderQueList.Count}" FontWeight="Bold" Foreground="#525f7f"/>
                                 </Border>
                             </Grid>
 
-                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,15,0,0" Height="250">
                                 <ItemsControl ItemsSource="{Binding OrderQueList}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border Background="{Binding CardBrushKey, Converter={StaticResource StyleConverter}}" CornerRadius="4" Padding="10" Margin="0,0,0,8">
-                                                <StackPanel>
-                                                    <Grid>
-                                                        <TextBlock Text="{Binding OrderTypeDisplay}" FontWeight="Bold" FontSize="14"/>
-                                                        <TextBlock Text="{Binding StockName}" HorizontalAlignment="Right" FontWeight="SemiBold"/>
-                                                    </Grid>
-                                                    <TextBlock Text="{Binding StockCode}" Foreground="Gray" FontSize="11" Margin="0,3,0,0"/>
-                                                    <TextBlock Margin="0,5,0,0">
-                                        <Run Text="{Binding OrderPrice, StringFormat=N0}"/>
-                                        <Run Text="원 / "/>
-                                        <Run Text="{Binding UnfilledQuantity, StringFormat=N0}"/>
-                                        <Run Text="주"/>
-                                                    </TextBlock>
-                                                </StackPanel>
+                                            <Border Background="White" CornerRadius="4" Margin="0,0,5,8" Padding="12,8">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <Border Grid.Column="0" Width="4" CornerRadius="2"
+                                                            Background="{Binding CardBrushKey, Converter={StaticResource StyleConverter}}" Margin="-12,-8,8,-8"/>
+
+                                                    <StackPanel Grid.Column="1">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="{Binding OrderTypeDisplay}" FontWeight="Bold" FontSize="13" Foreground="{Binding CardBrushKey, Converter={StaticResource StyleConverter}}"/>
+                                                            <TextBlock Grid.Column="1" Text="{Binding OrderTime}" HorizontalAlignment="Center" FontSize="11" Foreground="Gray" VerticalAlignment="Center" FontFamily="Consolas"/>
+                                                            <TextBlock Grid.Column="2" Text="{Binding OrderStatusDisplay}" HorizontalAlignment="Right" FontSize="12" Foreground="#525f7f" FontWeight="SemiBold"/>
+                                                        </Grid>
+
+                                                        <TextBlock Margin="0,4,0,0" FontWeight="SemiBold">
+                                                            <Run Text="{Binding StockName}"/>
+                                                            <Run Text="|" Foreground="LightGray"/>
+                                                            <Run Text="{Binding StockCode}" Foreground="Gray" FontSize="11"/>
+                                                        </TextBlock>
+                                                        <TextBlock Margin="0,4,0,0" FontSize="11" Foreground="#8898aa">
+                                                            <Run Text="계좌:"/>
+                                                            <Run Text="{Binding AccountNumber}"/>
+                                                        </TextBlock>
+                                                        <TextBlock Margin="0,2,0,0">
+                                                            <Run Text="{Binding OrderPrice, StringFormat=N0}" FontWeight="SemiBold"/>
+                                                            <Run Text="원 /"/>
+                                                            <Run Text="{Binding OrderQuantity, StringFormat=N0}" FontWeight="SemiBold"/>
+                                                            <Run Text="주"/>
+                                                        </TextBlock>
+                                                    </StackPanel>
+                                                </Grid>
                                             </Border>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -128,11 +158,11 @@
                         </Grid>
                     </Border>
                 </Grid>
+
                 <Border Style="{StaticResource KPICard}" Margin="40,10">
                     <StackPanel>
                         <TextBlock Text="Holdings" Style="{StaticResource CardTitle}" FontSize="16" Foreground="#32325d"/>
-
-                        <DataGrid ItemsSource="{Binding AllHoldings}">
+                        <DataGrid ItemsSource="{Binding AllHoldings}" MaxHeight="400">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="Account" Binding="{Binding AccountNumber}" Width="*" CellStyle="{StaticResource CenterAlignedCellStyle}"/>
                                 <DataGridTextColumn Header="Code" Binding="{Binding StockCode}" Width="Auto" CellStyle="{StaticResource CenterAlignedCellStyle}"/>
@@ -153,6 +183,7 @@
                                 </DataGridTextColumn>
                                 <DataGridTextColumn Header="Avg. Price" Binding="{Binding PurchasePrice, StringFormat=N0}" Width="*" CellStyle="{StaticResource RightAlignedCellStyle}"/>
                                 <DataGridTextColumn Header="Price" Binding="{Binding CurrentPrice, StringFormat=N0}" Width="*" CellStyle="{StaticResource RightAlignedCellStyle}"/>
+                                <!--<DataGridTextColumn Header="(PrevClose)" Binding="{Binding PreviousClosePrice, StringFormat=N0}" Width="*" CellStyle="{StaticResource RightAlignedCellStyle}"/>-->
                                 <DataGridTextColumn Header="Change (%)" Binding="{Binding DailyFluctuationRate, StringFormat={}{0:F2}}" Width="Auto" CellStyle="{StaticResource RightAlignedCellStyle}">
                                     <DataGridTextColumn.ElementStyle>
                                         <Style TargetType="TextBlock">

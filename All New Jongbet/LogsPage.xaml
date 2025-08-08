@@ -20,55 +20,17 @@
         </StackPanel>
 
         <Grid Grid.Row="1" Margin="40,0,40,30">
-            <Grid.ColumnDefinitions>
-                <!-- CHANGED: 너비 비율을 가변(*)과 고정(400)으로 조정 -->
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="220"/>
-            </Grid.ColumnDefinitions>
-
-            <!-- Left: System Logs -->
-            <Border Grid.Column="0" Style="{StaticResource KPICard}" Margin="0,0,10,0">
+            <Border Grid.Column="0" Style="{StaticResource KPICard}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     <TextBlock Grid.Row="0" Text="System Logs" Style="{StaticResource CardTitle}" FontSize="16" Foreground="#32325d"/>
-                    <TextBox Grid.Row="1" x:Name="LogTextBox" FontFamily="Consolas" IsReadOnly="True" VerticalScrollBarVisibility="Auto" TextWrapping="NoWrap" AcceptsReturn="True" BorderThickness="0" Margin="0,10,0,0"/>
-                </Grid>
-            </Border>
-
-            <!-- Right: Order History -->
-            <Border Grid.Column="1" Style="{StaticResource KPICard}" Margin="10,0,0,0">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Text="Order History" Style="{StaticResource CardTitle}" FontSize="16" Foreground="#32325d"/>
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
-                        <ItemsControl ItemsSource="{Binding OrderLogList}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Style="{StaticResource OrderLogItemStyle}" BorderBrush="{Binding BorderBrushKey, Converter={StaticResource StyleConverter}}">
-                                        <StackPanel>
-                                            <TextBlock Text="{Binding TimestampDisplay}" HorizontalAlignment="Left" Foreground="Gray" FontSize="11" Margin="0,0,0,5"/>
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Text="{Binding OrderTypeDisplay}" FontWeight="Bold" Foreground="{Binding BorderBrushKey, Converter={StaticResource StyleConverter}}" Margin="0,0,10,0"/>
-                                                <TextBlock Grid.Column="1" Text="{Binding StockName}" FontWeight="SemiBold" HorizontalAlignment="Left"/>
-                                            </Grid>
-                                            <TextBlock Margin="0,5,0,2"><Run Text="{Binding StockCode}" Foreground="Gray"/><Run Text=" | "/><Run Text="{Binding AccountNumber}"/></TextBlock>
-                                            <TextBlock><Run Text="Price:" FontWeight="SemiBold"/><Run Text="{Binding OrderPrice, StringFormat=N0}"/><Run Text=" | "/><Run Text="Qty:" FontWeight="SemiBold"/><Run Text="{Binding OrderQuantity, StringFormat=N0}"/></TextBlock>
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
+                    <TextBox Grid.Row="1" x:Name="LogTextBox" FontFamily="Consolas" IsReadOnly="True" 
+                             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                             TextWrapping="Wrap" AcceptsReturn="True" 
+                             BorderThickness="0" Margin="0,10,0,0"/>
                 </Grid>
             </Border>
         </Grid>

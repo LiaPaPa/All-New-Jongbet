@@ -4,7 +4,6 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.ComponentModel;
-using System.Linq; // Linq 사용
 using System.Collections.ObjectModel; // ObservableCollection 사용
 
 namespace All_New_Jongbet
@@ -91,5 +90,33 @@ namespace All_New_Jongbet
             DailyAssetList = new ObservableCollection<DailyAssetInfo>();
         }
 
+        // [NEW] 보유 종목 변경 시 계좌 전체 요약 정보를 다시 계산하고 UI에 알리는 메서드
+        public void RecalculateAndUpdateTotals()
+        {
+            if (HoldingStockList == null || !HoldingStockList.Any())
+            {
+                // 보유 종목이 없으면 평가 관련 금액은 0으로 처리
+                TotalPurchaseAmount = 0;
+                TotalEvaluationAmount = 0;
+                TotalEvaluationProfitLoss = 0;
+                TotalProfitRate = 0;
+                // 추정예탁자산은 현금 잔고만 남게 됨 (여기서는 단순화하여 0으로 처리,
+                // 실제로는 현금 잔액을 별도 관리해야 함)
+            }
+            else
+            {
+                TotalPurchaseAmount = HoldingStockList.Sum(s => s.PurchaseAmount);
+                TotalEvaluationAmount = HoldingStockList.Sum(s => s.EvaluationAmount);
+                TotalEvaluationProfitLoss = TotalEvaluationAmount - TotalPurchaseAmount;
+                TotalProfitRate = (TotalPurchaseAmount > 0) ? (TotalEvaluationProfitLoss / TotalPurchaseAmount) * 100 : 0;
+            }
+
+            // 변경된 속성들을 UI에 알림
+            OnPropertyChanged(nameof(TotalPurchaseAmount));
+            OnPropertyChanged(nameof(TotalEvaluationAmount));
+            OnPropertyChanged(nameof(TotalEvaluationProfitLoss));
+            OnPropertyChanged(nameof(TotalProfitRate));
+            OnPropertyChanged(nameof(EstimatedDepositAsset)); // 추정예탁자산도 함께 업데이트
+        }
     }
 }

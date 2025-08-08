@@ -1,9 +1,10 @@
-﻿using Newtonsoft.Json;
+﻿// KiwoomApiService.cs 파일 전체를 아래 코드로 교체하세요.
+
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
+using System.Globalization;
 using System.Linq;
 using System.Net.Http;
 using System.Net.WebSockets;
@@ -17,21 +18,37 @@ namespace All_New_Jongbet
     {
         private static readonly HttpClient httpClient = new HttpClient();
         private const string BaseUrl = "https://api.kiwoom.com";
-        private const string WebSocketUrl = "wss://api.kiwoom.com:10000/api/dostk/websocket";
 
-        // --- HTTP 요청 메서드 ---
+        public Task SendWsMessageAsync(ClientWebSocket ws, object message, bool log = true)
+        {
+            if (ws == null || ws.State != WebSocketState.Open)
+            {
+                Logger.Instance.Add("[WebSocket 오류] 소켓이 연결되지 않은 상태에서 메시지를 보내려 했습니다.");
+                return Task.CompletedTask;
+            }
+
+            var jsonMessage = JsonConvert.SerializeObject(message);
+            if (log && App.IsDebugMode)
+            {
+                Logger.Instance.Add($"[WebSocket 전송 Body] {jsonMessage}");
+            }
+            var messageBuffer = Encoding.UTF8.GetBytes(jsonMessage);
+            return ws.SendAsync(new ArraySegment<byte>(messageBuffer), WebSocketMessageType.Text, true, CancellationToken.None);
+        }
 
         public async Task<(string Token, bool IsSuccess)> GetAccessTokenAsync(string appKey, string secretKey)
         {
-            Logger.Instance.Add("[TR 요청] 접근토큰 발급 (au10001)");
+            string jsonBody = JsonConvert.SerializeObject(new { grant_type = "client_credentials", appkey = appKey, secretkey = secretKey });
             var requestUrl = $"{BaseUrl}/oauth2/token";
-            var requestBody = new { grant_type = "client_credentials", appkey = appKey, secretkey = secretKey };
-            var jsonBody = JsonConvert.SerializeObject(requestBody);
             var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
+
             try
             {
+                Logger.Instance.Add("[TR 요청 시작] 접근토큰 발급 (au10001)");
                 HttpResponseMessage response = await httpClient.PostAsync(requestUrl, content);
                 var responseString = await response.Content.ReadAsStringAsync();
+                Logger.Instance.Add("[TR 수신 완료] 접근토큰 발급 (au10001)");
+
                 if (response.IsSuccessStatusCode)
                 {
                     dynamic result = JsonConvert.DeserializeObject(responseString);
@@ -59,13 +76,36 @@ namespace All_New_Jongbet
             {
                 try
                 {
-                    account.TotalPurchaseAmount = (double)response.JsonData.tot_pur_amt;
-                    account.TotalEvaluationAmount = (double)response.JsonData.tot_evlt_amt;
-                    account.TotalEvaluationProfitLoss = (double)response.JsonData.tot_evlt_pl;
-                    account.TotalProfitRate = (double)response.JsonData.tot_prft_rt;
-                    account.EstimatedDepositAsset = (double)response.JsonData.prsm_dpst_aset_amt;
-                    account.HoldingStockList = response.JsonData.acnt_evlt_remn_indv_tot != null ? ((JArray)response.JsonData.acnt_evlt_remn_indv_tot).ToObject<List<HoldingStock>>() : new List<HoldingStock>();
-                    Logger.Instance.Add($"[TR 응답] 계좌평가잔고 조회 성공. 보유종목: {account.HoldingStockList.Count}개");
+                    account.TotalPurchaseAmount = (double)response.JsonData["tot_pur_amt"];
+                    account.TotalEvaluationAmount = (double)response.JsonData["tot_evlt_amt"];
+                    account.TotalEvaluationProfitLoss = (double)response.JsonData["tot_evlt_pl"];
+                    account.TotalProfitRate = (double)response.JsonData["tot_prft_rt"];
+                    account.EstimatedDepositAsset = (double)response.JsonData["prsm_dpst_aset_amt"];
+
+                    var holdings = new List<HoldingStock>();
+                    if (response.JsonData["acnt_evlt_remn_indv_tot"] is JArray holdingsJArray)
+                    {
+                        foreach (var item in holdingsJArray)
+                        {
+                            var stock = new HoldingStock
+                            {
+                                StockCode = item["stk_cd"]?.ToString(),
+                                StockName = item["stk_nm"]?.ToString(),
+                                EvaluationProfitLoss = double.TryParse(item["evltv_prft"]?.ToString(), out var evltvPrft) ? evltvPrft : 0,
+                                ProfitRate = double.TryParse(item["prft_rt"]?.ToString(), out var prftRt) ? prftRt : 0,
+                                PurchasePrice = double.TryParse(item["pur_pric"]?.ToString(), out var purPric) ? purPric : 0,
+                                PreviousClosePrice = double.TryParse(item["pred_close_pric"]?.ToString(), out var predClosePric) ? predClosePric : 0,
+                                HoldingQuantity = int.TryParse(item["rmnd_qty"]?.ToString(), out var rmndQty) ? rmndQty : 0,
+                                TradableQuantity = int.TryParse(item["trde_able_qty"]?.ToString(), out var trdeAbleQty) ? trdeAbleQty : 0,
+                                CurrentPrice = double.TryParse(item["cur_prc"]?.ToString(), out var curPrc) ? curPrc : 0,
+                                PurchaseAmount = double.TryParse(item["pur_amt"]?.ToString(), out var purAmt) ? purAmt : 0,
+                                EvaluationAmount = double.TryParse(item["evlt_amt"]?.ToString(), out var evltAmt) ? evltAmt : 0
+                            };
+                            holdings.Add(stock);
+                        }
+                    }
+                    account.HoldingStockList = holdings;
+                    Logger.Instance.Add($"[TR 응답] {account.AccountNumber} 계좌평가잔고 조회 성공. 보유종목: {account.HoldingStockList.Count}개");
                     return true;
                 }
                 catch (Exception ex)
@@ -85,12 +125,9 @@ namespace All_New_Jongbet
             {
                 var requestBody = new { start_dt = startDate, end_dt = endDate };
                 var response = await SendHttpRequestAsync(account, "kt00002", "/api/dostk/acnt", requestBody, contYn, nextKey);
-                if (response.IsSuccess && response.JsonData != null)
+                if (response.IsSuccess && response.JsonData?["daly_prsm_dpst_aset_amt_prst"] is JArray historyArray)
                 {
-                    if (response.JsonData.daly_prsm_dpst_aset_amt_prst != null)
-                    {
-                        allHistory.AddRange(((JArray)response.JsonData.daly_prsm_dpst_aset_amt_prst).ToObject<List<DailyAssetInfo>>());
-                    }
+                    allHistory.AddRange(historyArray.ToObject<List<DailyAssetInfo>>());
                     contYn = response.ContYn;
                     nextKey = response.NextKey;
                 }
@@ -99,7 +136,7 @@ namespace All_New_Jongbet
                     contYn = "N";
                 }
             } while (contYn == "Y");
-            Logger.Instance.Add($"[TR 응답 완료] 일별추정예탁자산 조회 성공. 총 {allHistory.Count}일치 데이터 수신.");
+            Logger.Instance.Add($"[TR 응답 완료] {account.AccountNumber} 계좌 일별추정예탁자산 조회 성공. 총 {allHistory.Count}일치 데이터 수신.");
             return allHistory.OrderBy(x => x.Date).ToList();
         }
 
@@ -109,16 +146,21 @@ namespace All_New_Jongbet
             string contYn = "N";
             string nextKey = "";
             string today = DateTime.Today.ToString("yyyyMMdd");
-            Logger.Instance.Add($"[TR 요청 시작] 주문체결내역 조회 (kt00007) - 계좌: {account.AccountNumber}");
             do
             {
                 var requestBody = new { ord_dt = today, qry_tp = "1", stk_bond_tp = "1", sell_tp = "0", stk_cd = "", fr_ord_no = "", dmst_stex_tp = "%" };
                 var response = await SendHttpRequestAsync(account, "kt00007", "/api/dostk/acnt", requestBody, contYn, nextKey);
-                if (response.IsSuccess && response.JsonData != null)
+                if (response.IsSuccess && response.JsonData?["acnt_ord_cntr_prps_dtl"] is JArray ordersArray)
                 {
-                    if (response.JsonData.ord_dtl != null)
+                    var receivedOrders = ordersArray.ToObject<List<OrderHistoryItem>>();
+                    if (receivedOrders != null)
                     {
-                        allOrders.AddRange(((JArray)response.JsonData.ord_dtl).ToObject<List<OrderHistoryItem>>());
+                        for (int i = 0; i < receivedOrders.Count; i++)
+                        {
+                            int.TryParse(ordersArray[i]["ord_remnq"]?.ToString(), out int unfilledQty);
+                            receivedOrders[i].UnfilledQuantity = unfilledQty;
+                        }
+                        allOrders.AddRange(receivedOrders);
                     }
                     contYn = response.ContYn;
                     nextKey = response.NextKey;
@@ -128,124 +170,133 @@ namespace All_New_Jongbet
                     contYn = "N";
                 }
             } while (contYn == "Y");
-            Logger.Instance.Add($"[TR 응답 완료] 주문체결내역 조회 성공. 총 {allOrders.Count}건 수신.");
+            Logger.Instance.Add($"[TR 응답 완료] {account.AccountNumber} 계좌 주문체결내역 조회 성공. 총 {allOrders.Count}건 수신.");
             return allOrders;
         }
 
-        public async Task<StockBasicInfo> GetStockBasicInfoAsync(AccountInfo account, string stockCode)
+        public async Task<List<OrderHistoryItem>> GetUnfilledOrdersAsync(AccountInfo account)
         {
-            var requestBody = new { stk_cd = stockCode };
-            var response = await SendHttpRequestAsync(account, "ka10001", "/api/dostk/stk", requestBody);
-            if (response.IsSuccess && response.JsonData != null)
+            var requestBody = new { all_stk_tp = "0", trde_tp = "0", stk_cd = "", stex_tp = "0" };
+            var response = await SendHttpRequestAsync(account, "ka10075", "/api/dostk/acnt", requestBody);
+
+            if (response.IsSuccess && response.JsonData?["oso"] is JArray ordersArray)
             {
-                return response.JsonData.ToObject<StockBasicInfo>();
+                try
+                {
+                    var unfilledOrders = ordersArray.ToObject<List<OrderHistoryItem>>();
+                    if (unfilledOrders != null)
+                    {
+                        for (int i = 0; i < unfilledOrders.Count; i++)
+                        {
+                            int.TryParse(ordersArray[i]["oso_qty"]?.ToString(), out int unfilledQty);
+                            unfilledOrders[i].UnfilledQuantity = unfilledQty;
+                            unfilledOrders[i].ExecutedQuantity = 0;
+                        }
+                        Logger.Instance.Add($"[TR 응답] {account.AccountNumber} 계좌 미체결 내역 조회 성공. {unfilledOrders.Count}건 수신.");
+                        return unfilledOrders;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Instance.Add($"[TR 오류] 미체결 내역 데이터 파싱 중 오류: {ex.Message}");
+                }
             }
-            return null;
+            return new List<OrderHistoryItem>();
         }
 
-        public async Task<List<DailyChartData>> GetDailyChartAsync(AccountInfo account, string stockCode)
+        public async Task<bool> SendBuyOrderAsync(AccountInfo account, string stockCode, int quantity, double price, string tradeType = "0")
         {
-            var requestBody = new { biz_dt = DateTime.Today.ToString("yyyyMMdd"), stk_cd = stockCode };
-            var response = await SendHttpRequestAsync(account, "ka10081", "/api/dostk/chart", requestBody);
-            if (response.IsSuccess && response.JsonData != null && response.JsonData.chart_data != null)
+            string sanitizedStockCode = stockCode.TrimStart('A');
+            var requestBody = new { dmst_stex_tp = "KRX", stk_cd = sanitizedStockCode, ord_qty = quantity.ToString(), ord_uv = price.ToString(), trde_tp = tradeType };
+            var response = await SendOrderRequestAsync(account, "kt10000", requestBody);
+            if (response.IsSuccess)
             {
-                return ((JArray)response.JsonData.chart_data).ToObject<List<DailyChartData>>();
+                Logger.Instance.Add($"[주문 성공] {account.AccountNumber} 계좌, {sanitizedStockCode} 종목 매수주문 정상 접수. 주문번호: {response.JsonData?["ord_no"]}");
+            }
+            return response.IsSuccess;
+        }
+
+        public async Task<bool> SendSellOrderAsync(AccountInfo account, string stockCode, int quantity, double price, string tradeType = "0")
+        {
+            string sanitizedStockCode = stockCode.TrimStart('A');
+            string orderPrice = tradeType == "3" ? "0" : price.ToString();
+            var requestBody = new { dmst_stex_tp = "KRX", stk_cd = sanitizedStockCode, ord_qty = quantity.ToString(), ord_uv = orderPrice, trde_tp = tradeType };
+            var response = await SendOrderRequestAsync(account, "kt10001", requestBody);
+            if (response.IsSuccess)
+            {
+                Logger.Instance.Add($"[주문 성공] {account.AccountNumber} 계좌, {sanitizedStockCode} 종목 매도주문 정상 접수. 주문번호: {response.JsonData?["ord_no"]}");
+            }
+            return response.IsSuccess;
+        }
+
+        public async Task<bool> SendCancelOrderAsync(AccountInfo account, string stockCode, string originalOrderNumber, int cancelQuantity)
+        {
+            string sanitizedStockCode = stockCode.TrimStart('A');
+            var requestBody = new { dmst_stex_tp = "KRX", orig_ord_no = originalOrderNumber, stk_cd = sanitizedStockCode, cncl_qty = cancelQuantity.ToString() };
+            var response = await SendOrderRequestAsync(account, "kt10003", requestBody);
+            if (response.IsSuccess)
+            {
+                Logger.Instance.Add($"[주문 성공] {account.AccountNumber} 계좌, {sanitizedStockCode} 종목 주문({originalOrderNumber}) 취소 정상 접수. 주문번호: {response.JsonData?["ord_no"]}");
+            }
+            return response.IsSuccess;
+        }
+
+        public async Task<List<SearchedStock>> GetWatchlistDetailsAsync(AccountInfo account, string[] stockCodes)
+        {
+            var stocks = new List<SearchedStock>();
+            if (stockCodes == null || !stockCodes.Any()) return stocks;
+
+            string codes = string.Join("|", stockCodes);
+            var requestBody = new { stk_cd = codes };
+            var response = await SendHttpRequestAsync(account, "ka10095", "/api/dostk/stkinfo", requestBody);
+
+            if (response.IsSuccess && response.JsonData?["atn_stk_infr"] is JArray detailsArray)
+            {
+                foreach (var item in detailsArray)
+                {
+                    stocks.Add(new SearchedStock(item["stk_cd"]?.ToString(), item["stk_nm"]?.ToString())
+                    {
+                        CurrentPrice = double.TryParse(item["cur_prc"]?.ToString(), out double curPrc) ? curPrc : 0,
+                        PreviousClosePrice = double.TryParse(item["pred_close_pric"]?.ToString(), out double predClosePric) ? predClosePric : 0,
+                        Volume = long.TryParse(item["trde_qty"]?.ToString(), out long vol) ? vol : 0,
+                        TradingAmount = long.TryParse(item["trde_prica"]?.ToString(), out long amount) ? amount : 0,
+                        MarketCap = long.TryParse(item["mac"]?.ToString(), out long marketCap) ? marketCap : 0
+                    });
+                }
+            }
+            // [NEW] 응답 결과 요약 로그
+            Logger.Instance.Add($"[TR 응답] ka10095: {stocks.Count}개 관심종목 정보 저장 완료.");
+            return stocks;
+        }
+
+        public async Task<List<DailyChartData>> GetDailyChartAsync(AccountInfo account, string stockCode, string date)
+        {
+            var requestBody = new { stk_cd = stockCode, base_dt = date, upd_stkpc_tp = "0" };
+            var response = await SendHttpRequestAsync(account, "ka10081", "/api/dostk/chart", requestBody);
+
+            if (response.IsSuccess && response.JsonData?["stk_dt_pole_chart_qry"] is JArray chartArray)
+            {
+                // [CHANGED] 수신된 원본 데이터의 개수만 로그로 출력
+                Logger.Instance.Add($" -> [ka10081] {stockCode} 수신 데이터: {chartArray.Count}건");
+
+                var allData = chartArray.ToObject<List<DailyChartData>>();
+                var baseDate = DateTime.ParseExact(date, "yyyyMMdd", CultureInfo.InvariantCulture);
+                var threeMonthsAgo = baseDate.AddMonths(-3);
+
+                var filteredData = allData
+                    .Where(d => !string.IsNullOrEmpty(d.Date) && DateTime.ParseExact(d.Date, "yyyyMMdd", CultureInfo.InvariantCulture) >= threeMonthsAgo)
+                    .ToList();
+
+                return filteredData;
             }
             return new List<DailyChartData>();
         }
 
-        // --- 웹소켓 요청 메서드 ---
-
-        // ✅ NEW: 누락되었던 GetConditionListAsync 메서드를 다시 추가했습니다.
-        public async Task<List<ConditionInfo>> GetConditionListAsync(AccountInfo account)
+        private async Task<(bool IsSuccess, JObject JsonData, string ContYn, string NextKey)> SendHttpRequestAsync(AccountInfo account, string apiId, string endpoint, object requestBody, string contYn = "N", string nextKey = "")
         {
-            Logger.Instance.Add($"[TR 요청] 조건검색 목록 조회 (ka10171) - 계좌: {account.AccountNumber}");
-            using (var ws = new ClientWebSocket())
-            {
-                try
-                {
-                    ws.Options.SetRequestHeader("authorization", $"Bearer {account.Token}");
-                    await ws.ConnectAsync(new Uri(WebSocketUrl), CancellationToken.None);
-                    var loginPacket = new { trnm = "LOGIN", token = account.Token };
-                    await SendWsMessageAsync(ws, loginPacket);
-                    var loginResponse = await ReceiveWsMessageAsync(ws);
-                    if (loginResponse["return_code"]?.ToString() != "0")
-                    {
-                        Logger.Instance.Add($"[WebSocket 오류] 조건검색 로그인 실패: {loginResponse["return_msg"]}");
-                        return new List<ConditionInfo>();
-                    }
-
-                    var requestPacket = new { trnm = "CNSRLST" };
-                    await SendWsMessageAsync(ws, requestPacket);
-                    var response = await ReceiveWsMessageAsync(ws);
-                    if (response["return_code"]?.ToString() == "0")
-                    {
-                        var conditions = new List<ConditionInfo>();
-                        JArray dataArray = (JArray)response["data"];
-                        foreach (var item in dataArray)
-                        {
-                            conditions.Add(new ConditionInfo { Index = item[0].ToString(), Name = item[1].ToString() });
-                        }
-                        return conditions;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Logger.Instance.Add($"[WebSocket 오류] 조건검색 목록 조회 중 오류: {ex.Message}");
-                }
-                finally
-                {
-                    if (ws.State == WebSocketState.Open) await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
-                }
-            }
-            return new List<ConditionInfo>();
-        }
-
-        public async Task<List<SearchedStock>> GetConditionSearchResultAsync(AccountInfo account, string conditionName, string conditionIndex)
-        {
-            Logger.Instance.Add($"[TR 요청] 조건검색 결과 요청 (ka10172) - 조건: {conditionName}");
-            using (var ws = new ClientWebSocket())
-            {
-                try
-                {
-                    ws.Options.SetRequestHeader("authorization", $"Bearer {account.Token}");
-                    await ws.ConnectAsync(new Uri(WebSocketUrl), CancellationToken.None);
-                    var loginPacket = new { trnm = "LOGIN", token = account.Token };
-                    await SendWsMessageAsync(ws, loginPacket);
-                    await ReceiveWsMessageAsync(ws);
-                    var requestPacket = new { trnm = "CNSSTK", cnsr_name = conditionName, cnsr_idx = conditionIndex };
-                    await SendWsMessageAsync(ws, requestPacket);
-                    var response = await ReceiveWsMessageAsync(ws);
-                    if (response["return_code"]?.ToString() == "0")
-                    {
-                        var stocks = new List<SearchedStock>();
-                        JArray dataArray = (JArray)response["data"];
-                        foreach (var item in dataArray)
-                        {
-                            stocks.Add(new SearchedStock(item[0].ToString(), item[1].ToString()));
-                        }
-                        return stocks;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Logger.Instance.Add($"[WebSocket 오류] 조건검색 결과 요청 중 오류: {ex.Message}");
-                }
-                finally
-                {
-                    if (ws.State == WebSocketState.Open) await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
-                }
-            }
-            return new List<SearchedStock>();
-        }
-
-        // --- 헬퍼 메서드 ---
-
-        private async Task<(bool IsSuccess, dynamic JsonData, string ContYn, string NextKey)> SendHttpRequestAsync(AccountInfo account, string apiId, string endpoint, object requestBody, string contYn = "N", string nextKey = "")
-        {
-            Logger.Instance.Add($"[TR 요청] {apiId} - 계좌: {account.AccountNumber}");
+            string jsonBody = JsonConvert.SerializeObject(requestBody);
             var requestUrl = $"{BaseUrl}{endpoint}";
-            var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+            var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
             var requestMessage = new HttpRequestMessage(HttpMethod.Post, requestUrl) { Content = content };
             requestMessage.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", account.Token);
             requestMessage.Headers.Add("api-id", apiId);
@@ -254,18 +305,54 @@ namespace All_New_Jongbet
                 requestMessage.Headers.Add("cont-yn", "Y");
                 requestMessage.Headers.Add("next-key", nextKey);
             }
+
             try
             {
+                Logger.Instance.Add($"[TR 요청 시작] {apiId} - 계좌: {account.AccountNumber}");
+                if (App.IsDebugMode) Logger.Instance.Add($" -> Request Body: {jsonBody}");
+
                 var response = await httpClient.SendAsync(requestMessage);
                 var responseString = await response.Content.ReadAsStringAsync();
-                dynamic result = JsonConvert.DeserializeObject(responseString);
-                if (response.IsSuccessStatusCode && result.return_code.ToString() == "0")
+                Logger.Instance.Add($"[TR 수신 완료] {apiId} - 계좌: {account.AccountNumber}");
+
+                // [CHANGED] 응답 Body 전체를 출력하는 대신, 상태 코드만 출력하도록 변경
+                if (App.IsDebugMode)
                 {
-                    string cont = response.Headers.TryGetValues("cont-yn", out var c) ? c.FirstOrDefault() : "N";
-                    string next = response.Headers.TryGetValues("next-key", out var n) ? n.FirstOrDefault() : "";
-                    return (true, result, cont, next);
+                    Logger.Instance.Add($" -> Response Status: {response.StatusCode}");
                 }
-                Logger.Instance.Add($"[TR 응답] {apiId} 조회 실패: {result.return_msg}");
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    Logger.Instance.Add($"[TR 응답] {apiId} 조회 실패: HTTP 상태 코드 {response.StatusCode}");
+                    return (false, null, "N", "");
+                }
+
+                try
+                {
+                    var result = JObject.Parse(responseString);
+                    var returnCodeToken = result["return_code"];
+
+                    if (returnCodeToken == null)
+                    {
+                        Logger.Instance.Add($"[TR 오류] {apiId}: 응답에 'return_code' 필드가 없습니다.");
+                        return (false, null, "N", "");
+                    }
+
+                    if (returnCodeToken.ToString() == "0")
+                    {
+                        string cont = response.Headers.TryGetValues("cont-yn", out var c) ? c.FirstOrDefault() : "N";
+                        string next = response.Headers.TryGetValues("next-key", out var n) ? n.FirstOrDefault() : "";
+                        return (true, result, cont, next);
+                    }
+                    else
+                    {
+                        Logger.Instance.Add($"[TR 응답] {apiId} 조회 실패: {result["return_msg"]}");
+                    }
+                }
+                catch (JsonReaderException jsonEx)
+                {
+                    Logger.Instance.Add($"[TR 오류] {apiId} 응답이 유효한 JSON이 아닙니다: {jsonEx.Message}");
+                }
             }
             catch (Exception ex)
             {
@@ -274,29 +361,56 @@ namespace All_New_Jongbet
             return (false, null, "N", "");
         }
 
-        private async Task<JObject> ReceiveWsMessageAsync(ClientWebSocket ws)
+        private async Task<(bool IsSuccess, JObject JsonData)> SendOrderRequestAsync(AccountInfo account, string apiId, object requestBody)
         {
-            using (var ms = new MemoryStream())
-            {
-                var buffer = new byte[8192];
-                WebSocketReceiveResult result;
-                do
-                {
-                    result = await ws.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
-                    ms.Write(buffer, 0, result.Count);
-                } while (!result.EndOfMessage);
-                var responseString = Encoding.UTF8.GetString(ms.ToArray());
-                Logger.Instance.Add($"[WebSocket 수신] {responseString}");
-                return JObject.Parse(responseString);
-            }
-        }
+            string jsonBody = JsonConvert.SerializeObject(requestBody);
+            var requestUrl = $"{BaseUrl}/api/dostk/ordr";
+            var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
+            var requestMessage = new HttpRequestMessage(HttpMethod.Post, requestUrl) { Content = content };
+            requestMessage.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", account.Token);
+            requestMessage.Headers.Add("api-id", apiId);
 
-        private Task SendWsMessageAsync(ClientWebSocket ws, object message)
-        {
-            var jsonMessage = JsonConvert.SerializeObject(message);
-            Logger.Instance.Add($"[WebSocket 전송] {jsonMessage}");
-            var messageBuffer = Encoding.UTF8.GetBytes(jsonMessage);
-            return ws.SendAsync(new ArraySegment<byte>(messageBuffer), WebSocketMessageType.Text, true, CancellationToken.None);
+            try
+            {
+                Logger.Instance.Add($"[주문 요청 시작] {apiId} - 계좌: {account.AccountNumber}");
+                if (App.IsDebugMode) Logger.Instance.Add($" -> Order Request Body: {jsonBody}");
+
+                var response = await httpClient.SendAsync(requestMessage);
+                var responseString = await response.Content.ReadAsStringAsync();
+                Logger.Instance.Add($"[주문 수신 완료] {apiId} - 계좌: {account.AccountNumber}");
+
+                if (App.IsDebugMode)
+                {
+                    Logger.Instance.Add($" -> Order Response Status: {response.StatusCode}");
+                    Logger.Instance.Add($" -> Order Response Body: {responseString}");
+                }
+
+                try
+                {
+                    var result = JObject.Parse(responseString);
+                    var returnCodeToken = result["return_code"];
+                    if (returnCodeToken == null)
+                    {
+                        Logger.Instance.Add($"[주문 오류] {apiId}: 응답에 'return_code' 필드가 없습니다.");
+                        return (false, null);
+                    }
+
+                    if (returnCodeToken.ToString() == "0")
+                    {
+                        return (true, result);
+                    }
+                    Logger.Instance.Add($"[주문 실패] {apiId}: {result["return_msg"]}");
+                }
+                catch (JsonReaderException jsonEx)
+                {
+                    Logger.Instance.Add($"[주문 오류] {apiId} 응답이 유효한 JSON이 아닙니다: {jsonEx.Message}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Instance.Add($"[주문 오류] {apiId} 요청 중 예외 발생: {ex.Message}");
+            }
+            return (false, null);
         }
     }
 }

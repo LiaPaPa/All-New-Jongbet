@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿// MainWindow.xaml.cs file
+
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Concurrent;
@@ -7,6 +8,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Net.WebSockets;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -17,7 +19,8 @@ namespace All_New_Jongbet
 {
     public partial class MainWindow : Window, INotifyPropertyChanged
     {
-        public static int ApiRequestDelay = 300;
+        // CHANGED: API 호출 간격을 210ms로 조정하여 속도 향상 (초당 5회 제한 준수)
+        public static int ApiRequestDelay = 210;
         public ObservableCollection<AccountInfo> AccountManageList { get; set; }
         public ObservableCollection<StrategyInfo> StrategyList { get; set; }
         public ObservableCollection<Notification> DisplayedNotifications { get; set; }
@@ -30,7 +33,10 @@ namespace All_New_Jongbet
         private readonly SystemSettingsPage _systemSettingsPage;
         private readonly LogsPage _logsPage;
         private readonly SettingsPage _settingsPage;
+
         private readonly Dictionary<string, KiwoomRealtimeClient> _realtimeClients = new Dictionary<string, KiwoomRealtimeClient>();
+        private readonly ConcurrentDictionary<string, TaskCompletionSource<JObject>> _wsResponseTasks = new ConcurrentDictionary<string, TaskCompletionSource<JObject>>();
+
         private ApiRequestScheduler _apiRequestScheduler;
         private TradingManager _tradingManager;
         private CancellationTokenSource _appCts = new CancellationTokenSource();
@@ -39,25 +45,29 @@ namespace All_New_Jongbet
         private readonly Notification _statusNotification;
 
         public event PropertyChangedEventHandler PropertyChanged;
+        public ObservableCollection<OrderHistoryItem> AllOrderHistoryList { get; set; }
 
         public MainWindow()
         {
             InitializeComponent();
             this.DataContext = this;
 
+            _apiService = new KiwoomApiService();
+            _orderNotificationQueue = new ConcurrentQueue<Notification>();
+
             AccountManageList = new ObservableCollection<AccountInfo>();
-            StrategyList = new ObservableCollection<StrategyInfo>();
             DisplayedNotifications = new ObservableCollection<Notification>();
             OrderLogList = new ObservableCollection<OrderLogItem>();
             OrderQueList = new ObservableCollection<OrderHistoryItem>();
-            _orderNotificationQueue = new ConcurrentQueue<Notification>();
-            _apiService = new KiwoomApiService();
+            AllOrderHistoryList = new ObservableCollection<OrderHistoryItem>();
 
             _statusNotification = new Notification { Message = "Initializing...", StyleKey = "RequestingStatusLabel" };
             DisplayedNotifications.Add(_statusNotification);
 
+            LoadStrategies();
+
             _dashboardPage = new DashboardPage(AccountManageList, OrderQueList);
-            _tradeSetupPage = new TradeSetupPage(StrategyList);
+            _tradeSetupPage = new TradeSetupPage(this, StrategyList);
             _systemSettingsPage = new SystemSettingsPage(this, AccountManageList, StrategyList);
             _logsPage = new LogsPage(OrderLogList);
             _settingsPage = new SettingsPage();
@@ -65,30 +75,137 @@ namespace All_New_Jongbet
             this.Loaded += async (s, e) =>
             {
                 Logger.Instance.Add("메인 윈도우 로딩 완료.");
-                LoadStrategies();
+                await LoadAndLinkTradeSettingsAsync();
+
                 await LoadApiKeysAndRequestTokensAsync();
-                await FetchAllConditionListsAsync();
+                await ConnectAllWebsocketsAsync();
+
+                var primaryAppKey = _realtimeClients.Keys.FirstOrDefault();
+                var activeAccounts = AccountManageList.Where(acc => acc.TokenStatus == "Success").ToList();
+                _apiRequestScheduler = new ApiRequestScheduler(activeAccounts);
+
+                if (primaryAppKey != null)
+                {
+                    var primaryWs = GetWebSocketByAppKey(primaryAppKey);
+                    if (primaryWs != null)
+                    {
+                        _tradingManager = new TradingManager(_apiService, StrategyList, AccountManageList, _apiRequestScheduler, primaryWs, _wsResponseTasks);
+                        await FetchAllConditionListsAsync();
+                    }
+                }
+
                 await FetchAllAccountBalancesAsync();
-                await FetchAllDailyAssetHistoriesAsync();
                 await FetchAllOrderHistoriesAsync();
+                await FetchAllDailyAssetHistoriesAsync();
+
+                await SubscribeToRealtimeDataAsync();
 
                 _dashboardPage.UpdateFullPeriodData(AccountManageList);
 
-                var activeAccounts = AccountManageList.Where(acc => acc.TokenStatus == "Success").ToList();
-                _apiRequestScheduler = new ApiRequestScheduler(activeAccounts);
-                _tradingManager = new TradingManager(_apiService, _apiRequestScheduler, StrategyList.Where(st => st.Status == "Active"));
-
                 _ = _apiRequestScheduler.RunAsync(_appCts.Token);
-                // ✅ CHANGED: Start()를 StartAsync()로 수정했습니다.
-                _ = _tradingManager.StartAsync(_appCts.Token);
 
-                await ConnectAllRealtimeSocketsAsync();
+                if (_tradingManager != null)
+                {
+                    _ = _tradingManager.StartAsync(_appCts.Token);
+                }
+
+                UpdateStatus("Auto Trading Ready", "StatusLabel");
+
                 SetSidebarButtonsEnabled(true);
                 MainFrame.Navigate(_dashboardPage);
                 DashboardButton.IsChecked = true;
             };
 
             _ = ProcessNotificationQueueAsync();
+        }
+
+        private async Task ConnectAllWebsocketsAsync()
+        {
+            Logger.Instance.Add("AppKey별 웹소켓 연결을 시작합니다.");
+            int accountIndex = 0;
+
+            foreach (var account in AccountManageList.Where(acc => acc.TokenStatus == "Success"))
+            {
+                if (_realtimeClients.ContainsKey(account.AppKey))
+                {
+                    Logger.Instance.Add($"{account.AccountNumber} 계좌의 AppKey에 대한 웹소켓은 이미 연결되어 있습니다.");
+                    continue;
+                }
+
+                UpdateStatus($"Connecting WebSocket for AppKey {account.AppKey.Substring(0, 8)}...", "RequestingStatusLabel");
+
+                var wsClient = new KiwoomRealtimeClient(account.Token);
+
+                wsClient.OnReceiveData += (data) =>
+                {
+                    string trnm = data["trnm"]?.ToString();
+                    if (trnm == "REAL")
+                    {
+                        HandleRealtimeData(account, data);
+                    }
+                    else if (trnm != null && _wsResponseTasks.TryRemove(trnm, out var tcs))
+                    {
+                        tcs.TrySetResult(data);
+                    }
+                };
+
+                bool isConnected = await wsClient.ConnectAndLoginAsync();
+                if (isConnected)
+                {
+                    _realtimeClients[account.AppKey] = wsClient;
+                    Logger.Instance.Add($"AppKey {account.AppKey.Substring(0, 8)}... 에 대한 웹소켓 연결 성공.");
+                }
+                accountIndex++;
+            }
+        }
+
+        private async Task SubscribeToRealtimeDataAsync()
+        {
+            Logger.Instance.Add("모든 계좌에 대한 실시간 데이터 구독을 시작합니다.");
+            int accountIndex = 0;
+
+            foreach (var account in AccountManageList.Where(acc => acc.TokenStatus == "Success"))
+            {
+                if (_realtimeClients.TryGetValue(account.AppKey, out var wsClient))
+                {
+                    await wsClient.RegisterRealtimeAsync($"{accountIndex:D2}01", new[] { "" }, new[] { "00" });
+                    await wsClient.RegisterRealtimeAsync($"{accountIndex:D2}02", new[] { "" }, new[] { "04" });
+
+                    if (account.HoldingStockList != null && account.HoldingStockList.Any())
+                    {
+                        var stockCodes = account.HoldingStockList.Select(s => s.StockCode).ToArray();
+                        await wsClient.RegisterRealtimeAsync($"{accountIndex:D2}03", stockCodes, new[] { "0B" });
+                    }
+                }
+                else
+                {
+                    Logger.Instance.Add($"[오류] {account.AccountNumber} 계좌의 AppKey에 해당하는 웹소켓 클라이언트를 찾을 수 없습니다.");
+                }
+                accountIndex++;
+            }
+        }
+
+        private ClientWebSocket GetWebSocketByAppKey(string appKey)
+        {
+            if (_realtimeClients.TryGetValue(appKey, out var client))
+            {
+                return client.WebSocket;
+            }
+            return null;
+        }
+
+        private void LoadStrategies()
+        {
+            StrategyList = StrategyRepository.Load();
+        }
+
+        private async Task LoadAndLinkTradeSettingsAsync()
+        {
+            Logger.Instance.Add("저장된 거래설정을 불러와 전략에 연결합니다.");
+            foreach (var strategy in StrategyList)
+            {
+                strategy.TradeSettings = await _tradeSetupPage.LoadTradeSettingsForStrategyAsync(strategy.StrategyNumber);
+            }
         }
 
         private void SetSidebarButtonsEnabled(bool isEnabled)
@@ -176,24 +293,6 @@ namespace All_New_Jongbet
             await Dispatcher.InvokeAsync(() => DisplayedNotifications.Remove(notification));
         }
 
-        private void LoadStrategies()
-        {
-            string strategyFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Strategy", "strategies.json");
-            if (File.Exists(strategyFilePath))
-            {
-                Logger.Instance.Add("저장된 전략 파일을 불러옵니다.");
-                string json = File.ReadAllText(strategyFilePath);
-                var loadedStrategies = JsonConvert.DeserializeObject<List<StrategyInfo>>(json);
-                if (loadedStrategies != null)
-                {
-                    foreach (var strategy in loadedStrategies)
-                    {
-                        StrategyList.Add(strategy);
-                    }
-                }
-            }
-        }
-
         public async Task LoadApiKeysAndRequestTokensAsync()
         {
             UpdateStatus("Requesting Tokens...", "RequestingStatusLabel");
@@ -243,10 +342,14 @@ namespace All_New_Jongbet
         public async Task FetchAllConditionListsAsync()
         {
             Logger.Instance.Add("모든 계좌의 조건식 목록 조회를 시작합니다.");
-            foreach (var account in AccountManageList.Where(acc => acc.TokenStatus == "Success"))
+            var allConditions = await _tradingManager.GetConditionListAsync();
+
+            if (allConditions != null)
             {
-                UpdateStatus($"Fetching Conditions for {account.AccountNumber}...", "RequestingStatusLabel");
-                account.Conditions = await _apiService.GetConditionListAsync(account);
+                foreach (var account in AccountManageList.Where(acc => acc.TokenStatus == "Success"))
+                {
+                    account.Conditions = allConditions;
+                }
             }
         }
 
@@ -295,64 +398,278 @@ namespace All_New_Jongbet
 
         public async Task FetchAllOrderHistoriesAsync()
         {
-            Logger.Instance.Add("모든 계좌의 주문/체결 내역 조회를 시작합니다.");
-            OrderQueList.Clear();
-            foreach (var account in AccountManageList.Where(acc => acc.TokenStatus == "Success"))
+            var strategyAccountNumbers = StrategyList
+                .Select(s => s.AccountNumber)
+                .Distinct()
+                .ToList();
+
+            if (!strategyAccountNumbers.Any())
             {
-                UpdateStatus($"Fetching Order History for {account.AccountNumber}...", "RequestingStatusLabel");
-                var history = await _apiService.GetOrderHistoryAsync(account);
-                var unfilledOrders = history.Where(o => o.UnfilledQuantity > 0);
-                foreach (var order in unfilledOrders)
-                {
-                    OrderQueList.Add(order);
-                }
+                Logger.Instance.Add("조회할 전략이 등록된 계좌가 없어 주문/체결 내역 조회를 건너뜁니다.");
+                return;
             }
+
+            Logger.Instance.Add($"전략에 등록된 계좌({string.Join(", ", strategyAccountNumbers)})의 주문/체결/미체결 내역 조회를 시작합니다.");
+
+            AllOrderHistoryList.Clear();
+            OrderQueList.Clear();
+
+            var accountsToQuery = AccountManageList
+                .Where(acc => acc.TokenStatus == "Success" && strategyAccountNumbers.Contains(acc.AccountNumber));
+
+            foreach (var account in accountsToQuery)
+            {
+                UpdateStatus($"Fetching Executed Orders for {account.AccountNumber}...", "RequestingStatusLabel");
+                var executedHistory = await _apiService.GetOrderHistoryAsync(account);
+                foreach (var order in executedHistory)
+                {
+                    order.AccountNumber = account.AccountNumber;
+                    AllOrderHistoryList.Add(order);
+                }
+
+                await Task.Delay(ApiRequestDelay);
+
+                UpdateStatus($"Fetching Unfilled Orders for {account.AccountNumber}...", "RequestingStatusLabel");
+                var unfilledHistory = await _apiService.GetUnfilledOrdersAsync(account);
+                foreach (var order in unfilledHistory)
+                {
+                    if (!AllOrderHistoryList.Any(o => o.OrderNumber == order.OrderNumber))
+                    {
+                        order.AccountNumber = account.AccountNumber;
+                        AllOrderHistoryList.Add(order);
+                    }
+                }
+
+                await Task.Delay(ApiRequestDelay);
+            }
+
+            foreach (var order in AllOrderHistoryList.OrderBy(o => o.OrderTime))
+            {
+                order.OrderStatusDisplay = ConvertApiStatusToDisplayStatus(order);
+                OrderQueList.Insert(0, order);
+            }
+
+            Logger.Instance.Add($"총 {OrderQueList.Count}건의 주문 내역을 로드했습니다.");
         }
 
-        public async Task ConnectAllRealtimeSocketsAsync()
+        private string ConvertApiStatusToDisplayStatus(OrderHistoryItem order)
         {
-            Logger.Instance.Add("모든 계좌의 실시간 소켓 연결을 시작합니다.");
-            int accountIndex = 0;
-            foreach (var account in AccountManageList.Where(acc => acc.TokenStatus == "Success"))
+            if (!string.IsNullOrEmpty(order.OrderStatusFromApi))
             {
-                UpdateStatus($"Connecting Realtime Socket for {account.AccountNumber}...", "RequestingStatusLabel");
-                var wsClient = new KiwoomRealtimeClient(account.Token);
-                _realtimeClients[account.AccountNumber] = wsClient;
-                wsClient.OnReceiveData += (data) => HandleRealtimeData(account, data);
-                bool isConnected = await wsClient.ConnectAndLoginAsync();
-                if (isConnected)
+                if (order.OrderStatusFromApi.Contains("취소")) return "취소완료";
+                if (order.OrderStatusFromApi.Contains("거부")) return "주문거부";
+                if (order.OrderStatusFromApi.Contains("확인"))
                 {
-                    string groupNumber = $"02{accountIndex:D2}";
-                    await wsClient.RegisterRealtimeAsync(groupNumber, new[] { "" }, new[] { "02" });
+                    return order.UnfilledQuantity > 0 ? "체결중" : "체결완료";
                 }
-                accountIndex++;
+                if (order.OrderStatusFromApi.Contains("접수")) return "체결대기";
             }
-            UpdateStatus("Auto Trading Ready", "StatusLabel");
+
+            if (order.ExecutedQuantity == 0 && order.UnfilledQuantity > 0)
+            {
+                return "체결대기";
+            }
+            else if (order.UnfilledQuantity > 0)
+            {
+                return "체결중";
+            }
+            else if (order.UnfilledQuantity == 0 && order.ExecutedQuantity > 0 && order.ExecutedQuantity == order.OrderQuantity)
+            {
+                return "체결완료";
+            }
+
+            if (order.UnfilledQuantity > 0 && order.ExecutedQuantity == 0)
+            {
+                return "체결대기";
+            }
+
+            return "확인필요";
         }
 
         private void HandleRealtimeData(AccountInfo account, JObject data)
         {
-            string trnm = data["trnm"]?.ToString();
-            if (trnm != "ACCT_EVL") return;
-            string stockCode = data["values"]?["9001"]?.ToString();
-            if (string.IsNullOrEmpty(stockCode)) return;
-            Dispatcher.Invoke(() =>
+            JArray dataArray = data["data"] as JArray;
+            if (dataArray == null) return;
+
+            foreach (JObject item in dataArray)
             {
-                var stockToUpdate = account.HoldingStockList.FirstOrDefault(s => s.StockCode == stockCode);
-                if (stockToUpdate != null)
+                string dataType = item["type"]?.ToString();
+                JObject values = item["values"] as JObject;
+                if (values == null) continue;
+
+                if (dataType == "0B")
                 {
-                    if (double.TryParse(data["values"]?["10"]?.ToString(), out var currentPrice)) stockToUpdate.CurrentPrice = currentPrice;
-                    if (double.TryParse(data["values"]?["11"]?.ToString(), out var change)) stockToUpdate.ChangeFromPreviousDay = change;
-                    if (double.TryParse(data["values"]?["12"]?.ToString(), out var rate)) stockToUpdate.FluctuationRate = rate;
-                    if (double.TryParse(data["values"]?["27"]?.ToString(), out var askPrice)) stockToUpdate.BestAskPrice = askPrice;
-                    if (double.TryParse(data["values"]?["28"]?.ToString(), out var bidPrice)) stockToUpdate.BestBidPrice = bidPrice;
-                    if (long.TryParse(data["values"]?["13"]?.ToString(), out var volume)) stockToUpdate.CumulativeVolume = volume;
-                    if (long.TryParse(data["values"]?["14"]?.ToString(), out var amount)) stockToUpdate.CumulativeAmount = amount;
-                    if (double.TryParse(data["values"]?["16"]?.ToString(), out var openPrice)) stockToUpdate.OpenPrice = openPrice;
-                    if (double.TryParse(data["values"]?["17"]?.ToString(), out var highPrice)) stockToUpdate.HighPrice = highPrice;
-                    if (double.TryParse(data["values"]?["18"]?.ToString(), out var lowPrice)) stockToUpdate.LowPrice = lowPrice;
+                    HandleStockExecution(values);
+                    continue;
                 }
-            });
+
+                string realtimeAccountNumber = values["9201"]?.ToString();
+                var targetAccount = AccountManageList.FirstOrDefault(acc => acc.AccountNumber.Contains(realtimeAccountNumber));
+                if (targetAccount == null) targetAccount = account;
+
+                switch (dataType)
+                {
+                    case "00": HandleOrderExecution(targetAccount, values); break;
+                    case "04": HandleBalanceUpdate(targetAccount, values); break;
+                }
+            }
+        }
+
+        private void HandleStockExecution(JObject values)
+        {
+            try
+            {
+                string stockCode = values["9001"]?.ToString()?.TrimStart('A');
+                if (string.IsNullOrEmpty(stockCode)) return;
+
+                double.TryParse(values["10"]?.ToString(), out double currentPrice);
+                double.TryParse(values["12"]?.ToString(), out double fluctuationRate);
+                long.TryParse(values["13"]?.ToString(), out long cumulativeVolume);
+                double.TryParse(values["17"]?.ToString(), out double highPrice);
+                double.TryParse(values["18"]?.ToString(), out double lowPrice);
+
+                foreach (var account in AccountManageList)
+                {
+                    var stockToUpdate = account.HoldingStockList?.FirstOrDefault(s => s.StockCode == stockCode);
+                    if (stockToUpdate != null)
+                    {
+                        Dispatcher.Invoke(() =>
+                        {
+                            stockToUpdate.CurrentPrice = currentPrice;
+                            stockToUpdate.FluctuationRate = fluctuationRate;
+                            stockToUpdate.CumulativeVolume = cumulativeVolume;
+                            stockToUpdate.HighPrice = highPrice;
+                            stockToUpdate.LowPrice = lowPrice;
+
+                            if (stockToUpdate.HoldingQuantity > 0)
+                            {
+                                stockToUpdate.EvaluationAmount = currentPrice * stockToUpdate.HoldingQuantity;
+                                stockToUpdate.EvaluationProfitLoss = stockToUpdate.EvaluationAmount - stockToUpdate.PurchaseAmount;
+                                if (stockToUpdate.PurchaseAmount > 0)
+                                {
+                                    stockToUpdate.ProfitRate = (stockToUpdate.EvaluationProfitLoss / stockToUpdate.PurchaseAmount) * 100;
+                                }
+                            }
+
+                            account.RecalculateAndUpdateTotals();
+                            _ = _tradingManager.CheckSellConditionsAsync(account, stockToUpdate);
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Instance.Add($"[오류] 실시간 주식체결 데이터 처리 중 예외 발생: {ex.Message}");
+            }
+        }
+
+        private void HandleOrderExecution(AccountInfo account, JObject values)
+        {
+            try
+            {
+                string orderNumber = values["9203"]?.ToString();
+                if (string.IsNullOrEmpty(orderNumber)) return;
+
+                string orderStatusFromApi = values["913"]?.ToString();
+                string stockCode = values["9001"]?.ToString()?.TrimStart('A');
+                string stockName = values["302"]?.ToString();
+                int.TryParse(values["900"]?.ToString(), out int orderQuantity);
+                int.TryParse(values["902"]?.ToString(), out int unfilledQuantity);
+                double.TryParse(values["901"]?.ToString(), out double orderPrice);
+                string orderTypeCode = values["906"]?.ToString();
+                string timeHHMMSS = values["908"]?.ToString();
+                string formattedTime = timeHHMMSS;
+                if (!string.IsNullOrEmpty(timeHHMMSS) && timeHHMMSS.Length == 6)
+                {
+                    formattedTime = $"{timeHHMMSS.Substring(0, 2)}:{timeHHMMSS.Substring(2, 2)}:{timeHHMMSS.Substring(4, 2)}";
+                }
+
+                Logger.Instance.Add($"[실시간 주문처리] 계좌:{account.AccountNumber}, 주문번호:{orderNumber}, 상태:{orderStatusFromApi}, 미체결:{unfilledQuantity}");
+
+                Dispatcher.Invoke(() =>
+                {
+                    var existingOrder = OrderQueList.FirstOrDefault(o => o.OrderNumber == orderNumber);
+
+                    if (existingOrder != null)
+                    {
+                        existingOrder.UnfilledQuantity = unfilledQuantity;
+                        existingOrder.ExecutedQuantity = orderQuantity - unfilledQuantity;
+                        existingOrder.OrderStatusFromApi = orderStatusFromApi;
+                        existingOrder.OrderTypeCode = orderTypeCode ?? existingOrder.OrderTypeCode;
+                        existingOrder.OrderTime = formattedTime ?? existingOrder.OrderTime;
+                        existingOrder.OrderStatusDisplay = ConvertApiStatusToDisplayStatus(existingOrder);
+                    }
+                    else
+                    {
+                        var newOrderItem = new OrderHistoryItem
+                        {
+                            AccountNumber = account.AccountNumber,
+                            OrderNumber = orderNumber,
+                            StockCode = stockCode,
+                            StockName = stockName,
+                            OrderQuantity = orderQuantity,
+                            OrderPrice = orderPrice,
+                            ExecutedQuantity = orderQuantity - unfilledQuantity,
+                            UnfilledQuantity = unfilledQuantity,
+                            OrderStatusFromApi = orderStatusFromApi,
+                            OrderTypeCode = orderTypeCode,
+                            OrderTime = formattedTime
+                        };
+                        newOrderItem.OrderStatusDisplay = ConvertApiStatusToDisplayStatus(newOrderItem);
+                        OrderQueList.Insert(0, newOrderItem);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Instance.Add($"[오류] 실시간 주문체결 데이터 처리 중 예외 발생: {ex.Message}");
+            }
+        }
+
+        private void HandleBalanceUpdate(AccountInfo account, JObject values)
+        {
+            try
+            {
+                string stockCode = values["9001"]?.ToString();
+                if (string.IsNullOrEmpty(stockCode)) return;
+
+                Logger.Instance.Add($"[실시간 잔고변경] 계좌:{account.AccountNumber}, 종목:{stockCode}");
+
+                Dispatcher.Invoke(() =>
+                {
+                    _apiRequestScheduler.EnqueueRequest(async (acc) =>
+                    {
+                        await _apiService.GetAccountBalanceAsync(account);
+                        _dashboardPage.UpdateFullPeriodData(AccountManageList);
+                    });
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Instance.Add($"[오류] 실시간 잔고 데이터 처리 중 예외 발생: {ex.Message}");
+            }
+        }
+
+        public async Task RunOrderTestAsync()
+        {
+            Logger.Instance.Add("===== 매수 주문 테스트 시작 =====");
+            UpdateStatus("Running Order Test...", "RequestingStatusLabel");
+
+            foreach (var account in AccountManageList.Where(acc => acc.TokenStatus == "Success" && acc.HoldingStockList.Any()))
+            {
+                foreach (var stock in account.HoldingStockList)
+                {
+                    Logger.Instance.Add($" -> 계좌({account.AccountNumber})의 보유종목({stock.StockName})에 대해 10회 매수 주문 시작");
+                    for (int i = 1; i <= 10; i++)
+                    {
+                        await _apiService.SendBuyOrderAsync(account, stock.StockCode, 1, 1000);
+                        await Task.Delay(ApiRequestDelay);
+                    }
+                }
+            }
+
+            Logger.Instance.Add("===== 모든 테스트 주문 요청이 완료되었습니다. =====");
+            UpdateStatus("Order Test Finished", "StatusLabel");
         }
 
         protected virtual void OnPropertyChanged(string propertyName)

@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Threading; // <-- 오류 해결을 위해 추가
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace All_New_Jongbet
@@ -18,7 +18,8 @@ namespace All_New_Jongbet
         {
             _accounts = activeAccounts;
             _requestQueue = new ConcurrentQueue<Func<AccountInfo, Task>>();
-            _minIntervalTicks = (long)(250 / 1000.0 * Stopwatch.Frequency);
+            // CHANGED: 고정 값 대신 MainWindow의 ApiRequestDelay 값을 사용하도록 변경
+            _minIntervalTicks = (long)(MainWindow.ApiRequestDelay / 1000.0 * Stopwatch.Frequency);
         }
 
         public void EnqueueRequest(Func<AccountInfo, Task> apiCall)
@@ -26,7 +27,6 @@ namespace All_New_Jongbet
             _requestQueue.Enqueue(apiCall);
         }
 
-        // NEW: TradingManager에서 사용할 수 있도록 추가된 메서드
         public AccountInfo GetNextAvailableAccount()
         {
             if (!_accounts.Any()) return null;

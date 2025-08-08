@@ -1,4 +1,6 @@
-﻿using Microsoft.Win32;
+﻿// SystemSettingsPage.xaml.cs 파일 전체를 아래 코드로 교체하세요.
+
+using Microsoft.Win32;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -64,25 +66,28 @@ namespace All_New_Jongbet
             }
         }
 
+        // [수정] 'Add Strategy' 버튼 클릭 이벤트 핸들러
         private void AddStrategy_Click(object sender, RoutedEventArgs e)
         {
             if (AccountsDataGrid.SelectedItem is AccountInfo selectedAccount &&
                 ConditionsDataGrid.SelectedItem is ConditionInfo selectedCondition)
             {
-                // CHANGED: 새로운 전략 번호를 기존 목록의 최대값 + 1로 계산 (목록이 비어있으면 1)
+                // 중복되지 않는 새로운 전략 번호 생성 (리스트가 비어있으면 1, 아니면 최대값+1)
                 int nextStrategyNumber = StrategyList.Any() ? StrategyList.Max(s => s.StrategyNumber) + 1 : 1;
 
                 var newStrategy = new StrategyInfo
                 {
-                    StrategyNumber = nextStrategyNumber, // 번호를 바로 부여
+                    StrategyNumber = nextStrategyNumber,
                     AccountNumber = selectedAccount.AccountNumber,
-                    Token = selectedAccount.Token,
                     ConditionIndex = selectedCondition.Index,
                     ConditionName = selectedCondition.Name,
-                    Status = "Inactive",
-                    ConditionSearchResultList = new List<StockItem>()
+                    Status = "Inactive", // 초기 상태는 'Inactive'
+                    CreationDate = string.Empty,
+                    LastExecutionDate = DateTime.MinValue
                 };
+
                 StrategyList.Add(newStrategy);
+                Logger.Instance.Add($"{newStrategy.StrategyNumber}번 신규 전략을 리스트에 추가했습니다. (상태: Inactive)");
                 UpdateAllButtonStates();
             }
             else
@@ -91,16 +96,27 @@ namespace All_New_Jongbet
             }
         }
 
+        // [수정] 'Save Strategy' 버튼 클릭 이벤트 핸들러
         private void SaveStrategy_Click(object sender, RoutedEventArgs e)
         {
-            // CHANGED: 번호 부여 로직을 제거하고, 상태와 날짜만 업데이트
-            foreach (var strategy in StrategyList.Where(s => s.Status == "Inactive"))
+            var inactiveStrategies = StrategyList.Where(s => s.Status == "Inactive").ToList();
+            if (!inactiveStrategies.Any())
             {
-                strategy.CreationDate = DateTime.Now.ToString("yyyy-MM-dd");
-                strategy.Status = "Active";
+                MessageBox.Show("저장할 신규(Inactive) 전략이 없습니다.", "알림");
+                return;
             }
 
-            SaveStrategiesToFile();
+            foreach (var strategy in inactiveStrategies)
+            {
+                strategy.CreationDate = DateTime.Now.ToString("yyyy-MM-dd");
+                strategy.Status = "Active"; // 상태를 'Active'로 변경
+                Logger.Instance.Add($"{strategy.StrategyNumber}번 전략의 상태를 Active로 변경하고 저장합니다.");
+            }
+
+            // 수정된 전체 전략 리스트를 파일에 저장
+            StrategyRepository.Save(StrategyList);
+            MessageBox.Show("신규 전략이 성공적으로 저장 및 활성화되었습니다.", "저장 완료");
+
             UpdateAllButtonStates();
         }
 
@@ -109,7 +125,7 @@ namespace All_New_Jongbet
             if (StrategyMatchingDataGrid.SelectedItem is StrategyInfo selectedStrategy)
             {
                 StrategyList.Remove(selectedStrategy);
-                SaveStrategiesToFile();
+                StrategyRepository.Save(StrategyList); // 삭제 후에도 파일 저장
                 UpdateAllButtonStates();
             }
         }
@@ -120,44 +136,19 @@ namespace All_New_Jongbet
             {
                 ConditionsDataGrid.ItemsSource = selectedAccount.Conditions;
             }
-
             UpdateAllButtonStates();
         }
 
         private void UpdateAllButtonStates()
         {
             AddStrategyButton.IsEnabled = AccountsDataGrid.SelectedItem != null && ConditionsDataGrid.SelectedItem != null;
-
-            // CHANGED
             SaveStrategyButton.IsEnabled = StrategyList.Any(s => s.Status == "Inactive");
-
             DeleteStrategyButton.IsEnabled = StrategyMatchingDataGrid.SelectedItem != null;
         }
 
-        private void SaveStrategiesToFile()
-        {
-            try
-            {
-                string strategyFolderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Strategy");
-                Directory.CreateDirectory(strategyFolderPath);
-                string filePath = Path.Combine(strategyFolderPath, "strategies.json");
-
-                string json = JsonConvert.SerializeObject(StrategyList.ToList(), Formatting.Indented);
-                File.WriteAllText(filePath, json);
-                Logger.Instance.Add("전략 목록을 파일에 저장했습니다.");
-            }
-            catch (Exception ex)
-            {
-                Logger.Instance.Add($"전략 파일 저장 중 오류 발생: {ex.Message}");
-                MessageBox.Show($"전략 파일 저장 중 오류 발생: {ex.Message}", "Error");
-            }
-        }
-
-        // NEW: 'Run Rate Limit Test' 버튼 클릭 이벤트 핸들러
         private void RunTest_Click(object sender, RoutedEventArgs e)
         {
-            // MainWindow에 있는 테스트 실행 메서드를 호출
-            //_mainWindow?.RunRateLimitTestAsync();
+            // _mainWindow?.RunRateLimitTestAsync();
         }
     }
 }
