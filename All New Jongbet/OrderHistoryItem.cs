@@ -31,27 +31,22 @@ namespace All_New_Jongbet
             set { _orderTime = value; OnPropertyChanged(); }
         }
 
-        private string _orderTypeCode;
+        private string _rawOrderTypeCode;
         [JsonProperty("io_tp_nm")]
         public string OrderTypeCode
         {
-            get => _orderTypeCode;
+            get => _rawOrderTypeCode;
             set
             {
-                string cleanedValue = value;
-                if (!string.IsNullOrEmpty(cleanedValue))
-                {
-                    cleanedValue = cleanedValue.Replace("+", "")
-                                               .Replace("-", "")
-                                               .Replace("현금", "")
-                                               .Replace("신용", "");
-                }
-                _orderTypeCode = cleanedValue;
-
+                _rawOrderTypeCode = value;
                 OnPropertyChanged(nameof(OrderTypeDisplay));
                 OnPropertyChanged(nameof(CardBrushKey));
             }
         }
+
+        // [NEW] 정정/취소 구분을 위한 속성 추가
+        [JsonProperty("mdfy_cncl")]
+        public string ModificationCancellationType { get; set; }
 
         [JsonProperty("ord_qty")]
         public int OrderQuantity { get; set; }
@@ -68,14 +63,12 @@ namespace All_New_Jongbet
         }
 
         private int _unfilledQuantity;
-        // [수정] JsonProperty를 제거하여 각기 다른 필드명(ord_remnq, oso_qty)을 수동으로 매핑할 수 있도록 함
         public int UnfilledQuantity
         {
             get => _unfilledQuantity;
             set { _unfilledQuantity = value; OnPropertyChanged(); }
         }
 
-        // [수정] JsonProperty를 제거하여 초기 조회 시 오류 방지. 실시간 데이터 수신 시에는 코드에서 직접 값을 할당.
         public string OrderStatusFromApi { get; set; }
 
         private string _orderStatusDisplay;
@@ -85,18 +78,45 @@ namespace All_New_Jongbet
             set { _orderStatusDisplay = value; OnPropertyChanged(); }
         }
 
-        public string OrderTypeDisplay => _orderTypeCode;
-        public string CardBrushKey => GetCardBrushKey(_orderTypeCode);
-
-        private string GetCardBrushKey(string typeCode)
+        public string OrderTypeDisplay
         {
-            if (string.IsNullOrEmpty(typeCode)) return "DefaultOrderCardBrush";
+            get
+            {
+                if (string.IsNullOrEmpty(_rawOrderTypeCode)) return "기타";
 
-            if (typeCode.Contains("취소")) return "CancelOrderCardBrush";
-            if (typeCode.Contains("매수")) return "BuyOrderCardBrush";
-            if (typeCode.Contains("매도")) return "SellOrderCardBrush";
+                string tradeAction = "";
+                if (_rawOrderTypeCode.Contains("매수") || _rawOrderTypeCode.Contains("+"))
+                    tradeAction = "매수";
+                else if (_rawOrderTypeCode.Contains("매도") || _rawOrderTypeCode.Contains("-"))
+                    tradeAction = "매도";
 
-            return "DefaultOrderCardBrush";
+                // [CHANGED] 정정/취소 여부를 조합하여 표시
+                if (!string.IsNullOrEmpty(ModificationCancellationType) && !string.IsNullOrEmpty(tradeAction))
+                {
+                    return tradeAction + ModificationCancellationType;
+                }
+
+                if (!string.IsNullOrEmpty(tradeAction))
+                    return tradeAction;
+
+                return _rawOrderTypeCode.Replace("+", "").Replace("-", "").Replace("현금", "").Replace("신용", "");
+            }
+        }
+
+        public string CardBrushKey
+        {
+            get
+            {
+                // [CHANGED] 정정/취소 주문도 Cancel 색상으로 표시
+                if (!string.IsNullOrEmpty(ModificationCancellationType) && (ModificationCancellationType.Contains("취소") || ModificationCancellationType.Contains("정정")))
+                {
+                    return "CancelOrderCardBrush";
+                }
+                if (string.IsNullOrEmpty(_rawOrderTypeCode)) return "DefaultOrderCardBrush";
+                if (_rawOrderTypeCode.Contains("매수") || _rawOrderTypeCode.Contains("+")) return "BuyOrderCardBrush";
+                if (_rawOrderTypeCode.Contains("매도") || _rawOrderTypeCode.Contains("-")) return "SellOrderCardBrush";
+                return "DefaultOrderCardBrush";
+            }
         }
 
         public event PropertyChangedEventHandler PropertyChanged;

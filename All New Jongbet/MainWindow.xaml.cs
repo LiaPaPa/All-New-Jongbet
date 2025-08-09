@@ -19,7 +19,6 @@ namespace All_New_Jongbet
 {
     public partial class MainWindow : Window, INotifyPropertyChanged
     {
-        // CHANGED: API 호출 간격을 210ms로 조정하여 속도 향상 (초당 5회 제한 준수)
         public static int ApiRequestDelay = 210;
         public ObservableCollection<AccountInfo> AccountManageList { get; set; }
         public ObservableCollection<StrategyInfo> StrategyList { get; set; }
@@ -89,7 +88,7 @@ namespace All_New_Jongbet
                     var primaryWs = GetWebSocketByAppKey(primaryAppKey);
                     if (primaryWs != null)
                     {
-                        _tradingManager = new TradingManager(_apiService, StrategyList, AccountManageList, _apiRequestScheduler, primaryWs, _wsResponseTasks);
+                        _tradingManager = new TradingManager(_apiService, StrategyList, AccountManageList, _apiRequestScheduler, primaryWs, _wsResponseTasks, OrderQueList);
                         await FetchAllConditionListsAsync();
                     }
                 }
@@ -168,13 +167,14 @@ namespace All_New_Jongbet
             {
                 if (_realtimeClients.TryGetValue(account.AppKey, out var wsClient))
                 {
-                    await wsClient.RegisterRealtimeAsync($"{accountIndex:D2}01", new[] { "" }, new[] { "00" });
-                    await wsClient.RegisterRealtimeAsync($"{accountIndex:D2}02", new[] { "" }, new[] { "04" });
+                    await wsClient.RegisterRealtimeAsync($"{accountIndex:D2}01", new[] { "" }, new[] { "00" }); // 주문체결
+                    await wsClient.RegisterRealtimeAsync($"{accountIndex:D2}02", new[] { "" }, new[] { "04" }); // 잔고
 
                     if (account.HoldingStockList != null && account.HoldingStockList.Any())
                     {
                         var stockCodes = account.HoldingStockList.Select(s => s.StockCode).ToArray();
-                        await wsClient.RegisterRealtimeAsync($"{accountIndex:D2}03", stockCodes, new[] { "0B" });
+                        await wsClient.RegisterRealtimeAsync($"{accountIndex:D2}03", stockCodes, new[] { "0B" }); // 주식체결
+                        await wsClient.RegisterRealtimeAsync($"{accountIndex:D2}04", stockCodes, new[] { "0C" }); // 주식우선호가
                     }
                 }
                 else
@@ -184,6 +184,7 @@ namespace All_New_Jongbet
                 accountIndex++;
             }
         }
+
 
         private ClientWebSocket GetWebSocketByAppKey(string appKey)
         {
@@ -497,23 +498,43 @@ namespace All_New_Jongbet
                 JObject values = item["values"] as JObject;
                 if (values == null) continue;
 
-                if (dataType == "0B")
+                string stockCode = values["9001"]?.ToString()?.TrimStart('A');
+                if (string.IsNullOrEmpty(stockCode))
                 {
-                    HandleStockExecution(values);
-                    continue;
+                    stockCode = item["item"]?.ToString()?.TrimStart('A');
                 }
-
-                string realtimeAccountNumber = values["9201"]?.ToString();
-                var targetAccount = AccountManageList.FirstOrDefault(acc => acc.AccountNumber.Contains(realtimeAccountNumber));
-                if (targetAccount == null) targetAccount = account;
 
                 switch (dataType)
                 {
-                    case "00": HandleOrderExecution(targetAccount, values); break;
-                    case "04": HandleBalanceUpdate(targetAccount, values); break;
+                    case "00": HandleOrderExecution(account, values); break;
+                    case "04": HandleBalanceUpdate(account, values); break;
+                    case "0B": HandleStockExecution(values); break;
+                    case "0C": HandlePriorityQuote(stockCode, values); break;
                 }
             }
         }
+
+        private void HandlePriorityQuote(string stockCode, JObject values)
+        {
+            if (string.IsNullOrEmpty(stockCode)) return;
+
+            double.TryParse(values["27"]?.ToString(), out double bestAskPrice);
+            double.TryParse(values["28"]?.ToString(), out double bestBidPrice);
+
+            foreach (var account in AccountManageList)
+            {
+                var stockToUpdate = account.HoldingStockList?.FirstOrDefault(s => s.StockCode == stockCode);
+                if (stockToUpdate != null)
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        stockToUpdate.BestAskPrice = Math.Abs(bestAskPrice);
+                        stockToUpdate.BestBidPrice = Math.Abs(bestBidPrice);
+                    });
+                }
+            }
+        }
+
 
         private void HandleStockExecution(JObject values)
         {
@@ -576,8 +597,12 @@ namespace All_New_Jongbet
                 int.TryParse(values["900"]?.ToString(), out int orderQuantity);
                 int.TryParse(values["902"]?.ToString(), out int unfilledQuantity);
                 double.TryParse(values["901"]?.ToString(), out double orderPrice);
-                string orderTypeCode = values["906"]?.ToString();
+                // CHANGED: 906(매매구분) -> 905(주문구분)으로 필드 변경
+                string orderTypeCode = values["905"]?.ToString();
                 string timeHHMMSS = values["908"]?.ToString();
+                int.TryParse(values["911"]?.ToString(), out int executedQuantity);
+                double.TryParse(values["910"]?.ToString(), out double executedPrice);
+
                 string formattedTime = timeHHMMSS;
                 if (!string.IsNullOrEmpty(timeHHMMSS) && timeHHMMSS.Length == 6)
                 {
@@ -596,7 +621,6 @@ namespace All_New_Jongbet
                         existingOrder.ExecutedQuantity = orderQuantity - unfilledQuantity;
                         existingOrder.OrderStatusFromApi = orderStatusFromApi;
                         existingOrder.OrderTypeCode = orderTypeCode ?? existingOrder.OrderTypeCode;
-                        existingOrder.OrderTime = formattedTime ?? existingOrder.OrderTime;
                         existingOrder.OrderStatusDisplay = ConvertApiStatusToDisplayStatus(existingOrder);
                     }
                     else
@@ -609,14 +633,80 @@ namespace All_New_Jongbet
                             StockName = stockName,
                             OrderQuantity = orderQuantity,
                             OrderPrice = orderPrice,
-                            ExecutedQuantity = orderQuantity - unfilledQuantity,
-                            UnfilledQuantity = unfilledQuantity,
+                            ExecutedQuantity = 0,
+                            UnfilledQuantity = orderQuantity,
                             OrderStatusFromApi = orderStatusFromApi,
                             OrderTypeCode = orderTypeCode,
                             OrderTime = formattedTime
                         };
                         newOrderItem.OrderStatusDisplay = ConvertApiStatusToDisplayStatus(newOrderItem);
                         OrderQueList.Insert(0, newOrderItem);
+                    }
+
+                    if (executedQuantity > 0)
+                    {
+                        bool isStrategyAccount = StrategyList.Any(s => s.AccountNumber == account.AccountNumber);
+                        if (isStrategyAccount)
+                        {
+                            TransactionRepository.AddOrUpdateTransaction(
+                                account.AccountNumber,
+                                stockCode,
+                                stockName,
+                                orderTypeCode,
+                                executedQuantity,
+                                executedPrice,
+                                formattedTime
+                            );
+                        }
+
+                        var holdingStock = account.HoldingStockList.FirstOrDefault(s => s.StockCode == stockCode);
+
+                        if (orderTypeCode.Contains("매수"))
+                        {
+                            if (holdingStock == null)
+                            {
+                                holdingStock = new HoldingStock
+                                {
+                                    StockCode = stockCode,
+                                    StockName = stockName,
+                                    HoldingQuantity = executedQuantity,
+                                    TradableQuantity = executedQuantity,
+                                    PurchasePrice = executedPrice,
+                                    PurchaseAmount = executedPrice * executedQuantity
+                                };
+                                account.HoldingStockList.Add(holdingStock);
+                            }
+                            else
+                            {
+                                double totalPurchaseAmount = holdingStock.PurchaseAmount + (executedPrice * executedQuantity);
+                                int totalQuantity = holdingStock.HoldingQuantity + executedQuantity;
+                                holdingStock.PurchasePrice = totalPurchaseAmount / totalQuantity;
+                                holdingStock.HoldingQuantity = totalQuantity;
+                                holdingStock.TradableQuantity += executedQuantity;
+                                holdingStock.PurchaseAmount = totalPurchaseAmount;
+                            }
+                        }
+                        else if (orderTypeCode.Contains("매도"))
+                        {
+                            if (holdingStock != null)
+                            {
+                                holdingStock.HoldingQuantity -= executedQuantity;
+                                if (holdingStock.HoldingQuantity <= 0)
+                                {
+                                    account.HoldingStockList.Remove(holdingStock);
+                                }
+                            }
+                        }
+                        account.RecalculateAndUpdateTotals();
+                    }
+
+                    if (unfilledQuantity == 0)
+                    {
+                        var orderToRemove = OrderQueList.FirstOrDefault(o => o.OrderNumber == orderNumber);
+                        if (orderToRemove != null)
+                        {
+                            OrderQueList.Remove(orderToRemove);
+                        }
                     }
                 });
             }

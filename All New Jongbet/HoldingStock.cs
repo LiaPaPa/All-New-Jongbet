@@ -1,6 +1,7 @@
 ﻿// HoldingStock.cs 파일 전체를 아래 코드로 교체하세요.
 
 using Newtonsoft.Json;
+using System; // DateTime? 사용을 위해 추가
 
 namespace All_New_Jongbet
 {
@@ -38,7 +39,6 @@ namespace All_New_Jongbet
 
         private double _currentPrice;
         [JsonProperty("cur_prc")]
-        // [수정] setter에서 자동 계산 로직을 모두 제거하여 순수한 속성으로 변경
         public double CurrentPrice { get => _currentPrice; set { _currentPrice = value; OnPropertyChanged(); } }
 
         private double _purchaseAmount;
@@ -60,5 +60,33 @@ namespace All_New_Jongbet
 
         private double _lowPrice;
         public double LowPrice { get => _lowPrice; set { _lowPrice = value; OnPropertyChanged(); } }
+
+        // [NEW] 실시간 호가 정보 저장을 위한 속성
+        [JsonIgnore]
+        public double BestAskPrice { get; set; } // 매도 1호가
+
+        [JsonIgnore]
+        public double BestBidPrice { get; set; } // 매수 1호가
+
+        // [NEW] 트레일링 스탑 로직을 위한 속성
+        [JsonIgnore]
+        public double HighestPriceSincePurchase { get; set; } = 0;
+
+        [JsonIgnore]
+        public bool IsTrailingStopActive { get; set; } = false;
+
+        // [NEW] 스탑로스 로직을 위한 속성
+        [JsonIgnore]
+        public bool IsStopLossMonitoring { get; set; } = false;
+
+        [JsonIgnore]
+        public DateTime? StopLossMonitoringStartTime { get; set; } = null;
+
+        // [NEW] 반등 컷 로직을 위한 속성
+        [JsonIgnore]
+        public bool IsReboundCutActive { get; set; } = false;
+
+        [JsonIgnore]
+        public double LowestPriceSinceReboundCutActive { get; set; } = 0;
     }
 }

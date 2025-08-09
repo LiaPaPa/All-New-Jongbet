@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
-using System.Windows; // <-- 오류 해결을 위해 추가되었습니다.
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
@@ -52,7 +52,6 @@ namespace All_New_Jongbet
         {
             if (accounts == null || !accounts.Any()) return;
 
-            // KPI 카드 데이터 계산
             double totalAssets = accounts.Sum(acc => acc.EstimatedDepositAsset);
             double totalProfitLoss = accounts.Sum(acc => acc.TotalEvaluationProfitLoss);
             _fullPeriodAggregatedAssets = accounts
@@ -84,7 +83,6 @@ namespace All_New_Jongbet
                 DailyChangeColor = dailyChange >= 0 ? Brushes.IndianRed : Brushes.CornflowerBlue;
             });
 
-            // 차트 데이터 계산
             for (int i = 0; i < _fullPeriodAggregatedAssets.Count; i++)
             {
                 if (i > 0 && _fullPeriodAggregatedAssets[i - 1].EstimatedAsset != 0)
@@ -93,7 +91,6 @@ namespace All_New_Jongbet
                     _fullPeriodAggregatedAssets[i].ProfitRate = 0;
             }
 
-            // Holdings 그리드 데이터 생성
             AllHoldings.Clear();
             foreach (var account in accounts)
             {
@@ -130,12 +127,35 @@ namespace All_New_Jongbet
             var filteredData = _fullPeriodAggregatedAssets.Skip(Math.Max(0, _fullPeriodAggregatedAssets.Count - days)).ToList();
             var assetValues = new ChartValues<double>(filteredData.Select(d => d.EstimatedAsset));
             var profitRateValues = new ChartValues<DailyAssetInfo>(filteredData);
+
+            // [CHANGED] 수익률(Profit) 컬럼 색상 톤 다운
             var profitRateMapper = new LiveCharts.Configurations.CartesianMapper<DailyAssetInfo>()
                 .Y(point => point.ProfitRate)
-                .Fill(point => point.ProfitRate >= 0 ? Brushes.IndianRed : Brushes.CornflowerBlue);
+                .Fill(point => point.ProfitRate >= 0 ?
+                               new SolidColorBrush(Color.FromRgb(0xEF, 0x9A, 0x9A)) : // 옅은 빨강
+                               new SolidColorBrush(Color.FromRgb(0x90, 0xCA, 0xF9))); // 옅은 파랑
+
             SeriesCollection.Clear();
-            SeriesCollection.Add(new LineSeries { Title = "총 자산", Values = assetValues, ScalesYAt = 0, PointGeometry = null, Fill = new SolidColorBrush(Colors.LightGray) { Opacity = 0.4 } });
-            SeriesCollection.Add(new ColumnSeries { Title = "일별 수익률", Values = profitRateValues, Configuration = profitRateMapper, ScalesYAt = 1 });
+
+            // [CHANGED] 자산(Assets) 라인 색상 및 음영 변경
+            SeriesCollection.Add(new LineSeries
+            {
+                Title = "총 자산",
+                Values = assetValues,
+                ScalesYAt = 0,
+                PointGeometry = null,
+                Stroke = Brushes.Black, // 라인 색상: 검정
+                Fill = new SolidColorBrush(Colors.Gold) { Opacity = 0.2 } // 음영 색상: 금색 (투명도 20%)
+            });
+
+            SeriesCollection.Add(new ColumnSeries
+            {
+                Title = "일별 수익률",
+                Values = profitRateValues,
+                Configuration = profitRateMapper,
+                ScalesYAt = 1
+            });
+
             Labels = filteredData.Select(d => DateTime.ParseExact(d.Date, "yyyyMMdd", null).ToString("MM-dd")).ToArray();
             OnPropertyChanged(nameof(Labels));
         }
