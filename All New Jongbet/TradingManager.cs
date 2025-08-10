@@ -9,7 +9,6 @@ using System.Linq;
 using System.Net.WebSockets;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows; // Dispatcher 사용을 위해 추가
 
 namespace All_New_Jongbet
 {
@@ -21,10 +20,10 @@ namespace All_New_Jongbet
         private readonly ApiRequestScheduler _apiRequestScheduler;
         private readonly ClientWebSocket _ws;
         private readonly ConcurrentDictionary<string, TaskCompletionSource<JObject>> _wsResponseTasks;
-        private readonly ObservableCollection<OrderHistoryItem> _orderQueList; // 미체결 목록 접근을 위해 추가
         private Dictionary<int, bool> _liquidationExecuted;
+        public bool IsTradingEnabled { get; private set; } = true; // 자동매매 활성화 상태 플래그
 
-        public TradingManager(KiwoomApiService apiService, ObservableCollection<StrategyInfo> strategies, ObservableCollection<AccountInfo> accountList, ApiRequestScheduler scheduler, ClientWebSocket ws, ConcurrentDictionary<string, TaskCompletionSource<JObject>> wsResponseTasks, ObservableCollection<OrderHistoryItem> orderQueList)
+        public TradingManager(KiwoomApiService apiService, ObservableCollection<StrategyInfo> strategies, ObservableCollection<AccountInfo> accountList, ApiRequestScheduler scheduler, ClientWebSocket ws, ConcurrentDictionary<string, TaskCompletionSource<JObject>> wsResponseTasks)
         {
             _apiService = apiService;
             _strategies = strategies;
@@ -32,8 +31,21 @@ namespace All_New_Jongbet
             _apiRequestScheduler = scheduler;
             _ws = ws;
             _wsResponseTasks = wsResponseTasks;
-            _orderQueList = orderQueList; // 생성자에서 미체결 목록 초기화
             _liquidationExecuted = new Dictionary<int, bool>();
+        }
+
+        // [NEW] 자동매매를 시작하는 public 메서드
+        public void StartTrading()
+        {
+            IsTradingEnabled = true;
+            Logger.Instance.Add("자동매매가 [시작]되었습니다.");
+        }
+
+        // [NEW] 자동매매를 중지하는 public 메서드
+        public void StopTrading()
+        {
+            IsTradingEnabled = false;
+            Logger.Instance.Add("자동매매가 [중지]되었습니다. (오늘 하루 실행되지 않습니다)");
         }
 
         public async Task StartAsync(CancellationToken cancellationToken)
@@ -58,7 +70,15 @@ namespace All_New_Jongbet
 
         private async Task ExecuteTradingCycleAsync()
         {
+            if (!IsTradingEnabled) return;
+
             DateTime now = DateTime.Now;
+            if (now.Hour == 0 && now.Minute < 2) // 자정 이후 초기화
+            {
+                IsTradingEnabled = true; // 매일 자정이 지나면 다시 시작 상태로 변경
+                _liquidationExecuted.Clear();
+            }
+
             if (!App.IsDebugMode && now.Hour >= 18)
             {
                 if (now.Hour == 18 && now.Minute < 1)
@@ -91,66 +111,66 @@ namespace All_New_Jongbet
 
         private async Task LiquidatePositionsIfNeededAsync(StrategyInfo strategy, AccountInfo account)
         {
-            Logger.Instance.Add($"[{strategy.ConditionName}] [청산] 로직을 시작합니다.");
+            Logger.Instance.Add($"[{strategy.ConditionName}] 매수 시작 1분 전, 잔여 포지션 청산을 시작합니다.");
 
             var unfilledOrders = await _apiService.GetUnfilledOrdersAsync(account);
-            await Task.Delay(MainWindow.ApiRequestDelay);
+            await Task.Delay(300);
 
             var buyOrdersToCancel = unfilledOrders.Where(o => o.OrderTypeCode.Contains("매수")).ToList();
             if (buyOrdersToCancel.Any())
             {
-                Logger.Instance.Add($"[{strategy.ConditionName}] [청산] 미체결 매수 주문 {buyOrdersToCancel.Count}건을 취소합니다.");
+                Logger.Instance.Add($" -> {buyOrdersToCancel.Count}건의 미체결 매수 주문을 취소합니다.");
                 foreach (var order in buyOrdersToCancel)
                 {
                     await _apiService.SendCancelOrderAsync(account, order.StockCode, order.OrderNumber, order.UnfilledQuantity);
-                    await Task.Delay(MainWindow.ApiRequestDelay);
+                    await Task.Delay(300);
                 }
             }
 
             await _apiService.GetAccountBalanceAsync(account);
-            await Task.Delay(MainWindow.ApiRequestDelay);
+            await Task.Delay(300);
             var holdings = account.HoldingStockList;
 
             var sellOrdersToCancel = unfilledOrders.Where(o => o.OrderTypeCode.Contains("매도")).ToList();
             foreach (var order in sellOrdersToCancel)
             {
-                Logger.Instance.Add($"[{strategy.ConditionName}] [청산] 미체결 매도 주문({order.StockName}) 취소 후 시장가로 재주문합니다.");
+                Logger.Instance.Add($" -> 미체결 매도 주문({order.StockName})을 취소하고 시장가로 재주문합니다.");
                 await _apiService.SendCancelOrderAsync(account, order.StockCode, order.OrderNumber, order.UnfilledQuantity);
-                await Task.Delay(MainWindow.ApiRequestDelay);
+                await Task.Delay(300);
             }
 
             if (holdings == null || !holdings.Any())
             {
-                Logger.Instance.Add($"[{strategy.ConditionName}] [청산] 청산할 보유 종목이 없습니다.");
+                Logger.Instance.Add(" -> 청산할 잔여 종목이 없습니다.");
                 return;
             }
 
-            Logger.Instance.Add($"[{strategy.ConditionName}] [청산] 보유 종목 {holdings.Count}개를 시장가로 매도합니다.");
+            Logger.Instance.Add($" -> {holdings.Count}개의 보유 종목을 시장가로 매도합니다.");
             foreach (var stock in holdings)
             {
                 if (stock.TradableQuantity > 0)
                 {
                     await _apiService.SendSellOrderAsync(account, stock.StockCode, stock.TradableQuantity, 0, "3");
-                    await Task.Delay(MainWindow.ApiRequestDelay);
+                    await Task.Delay(300);
                 }
             }
-            Logger.Instance.Add($"[{strategy.ConditionName}] [청산] 로직을 종료합니다.");
+            Logger.Instance.Add(" -> 모든 잔여 포지션에 대한 청산 주문이 완료되었습니다.");
         }
 
         private async Task ExecuteBuyLogicAsync(StrategyInfo strategy, AccountInfo account)
         {
-            Logger.Instance.Add($"[{strategy.ConditionName}] [매수] 로직을 시작합니다.");
+            Logger.Instance.Add($"[{strategy.ConditionName}] 매수 로직을 실행합니다.");
 
             var searchedStocks = await GetConditionSearchResultAsync(strategy);
             if (searchedStocks == null || !searchedStocks.Any())
             {
-                Logger.Instance.Add($"[{strategy.ConditionName}] [매수] 조건검색 결과: 포착된 종목이 없습니다.");
+                Logger.Instance.Add($" -> [{strategy.ConditionName}] 결과: 포착된 종목 없음");
                 strategy.LastExecutionDate = DateTime.Today;
                 StrategyRepository.Save(_strategies);
-                Logger.Instance.Add($"[{strategy.ConditionName}] [매수] 로직을 종료합니다.");
+                Logger.Instance.Add($"[{strategy.ConditionName}] 포착된 종목이 없어 오늘 전략 실행을 완료 처리합니다.");
                 return;
             }
-            Logger.Instance.Add($"[{strategy.ConditionName}] [매수] 조건검색 결과: {searchedStocks.Count}개 종목 포착.");
+            Logger.Instance.Add($" -> [{strategy.ConditionName}] 결과: {searchedStocks.Count}개 종목 포착");
 
             var detailedStocks = await FetchAllStockDataAsync(searchedStocks);
             var prioritizedStocks = CalculatePriorityAndSort(detailedStocks, strategy.TradeSettings.Buy.Priority);
@@ -158,160 +178,15 @@ namespace All_New_Jongbet
 
             foreach (var stock in stocksToOrder)
             {
-                Logger.Instance.Add($"[{strategy.ConditionName}] [매수] 주문 실행: {stock.StockName} ({stock.OrderPrice:N0}원 x {stock.OrderQuantity}주)");
+                Logger.Instance.Add($" -> [매수 주문 시도] 종목: {stock.StockName}, 가격: {stock.OrderPrice:N0}, 수량: {stock.OrderQuantity}");
                 await _apiService.SendBuyOrderAsync(account, stock.StockCode, stock.OrderQuantity, stock.OrderPrice, "5");
-                await Task.Delay(MainWindow.ApiRequestDelay);
+                await Task.Delay(300);
             }
 
             strategy.LastExecutionDate = DateTime.Today;
             StrategyRepository.Save(_strategies);
-            Logger.Instance.Add($"[{strategy.ConditionName}] [매수] 모든 주문 전송이 완료되어 로직을 종료합니다.");
+            Logger.Instance.Add($"[{strategy.ConditionName}] 매수 주문 시도가 완료되어, 오늘 전략 실행을 완료 처리합니다.");
         }
-
-        public async Task CheckSellConditionsAsync(AccountInfo account, HoldingStock stock)
-        {
-            var strategy = _strategies.FirstOrDefault(s => s.AccountNumber == account.AccountNumber);
-            if (strategy == null || strategy.TradeSettings == null || stock.TradableQuantity <= 0) return;
-
-            var settings = strategy.TradeSettings.Sell;
-            DateTime now = DateTime.Now;
-            var sellStartTime = DateTime.Today.AddHours(settings.SellStartHour).AddMinutes(settings.SellStartMinute);
-            var sellEndTime = DateTime.Today.AddHours(settings.SellEndHour).AddMinutes(settings.SellEndMinute);
-
-            if (now < sellStartTime || now > sellEndTime) return;
-
-            bool isSellOrderPending = _orderQueList.Any(o => o.AccountNumber == account.AccountNumber &&
-                                                            o.StockCode == stock.StockCode &&
-                                                            o.OrderTypeCode.Contains("매도") &&
-                                                            o.UnfilledQuantity > 0);
-            if (isSellOrderPending) return;
-
-            string sellReason = "";
-
-            // 1. 목표가 유형별 매도 조건 확인
-            switch (settings.TargetPriceType)
-            {
-                case "단순":
-                    if (stock.ProfitRate >= settings.SimpleTargetPrice)
-                        sellReason = $"단순 목표가({settings.SimpleTargetPrice}%) 도달";
-                    break;
-                case "트레일링":
-                    if (!stock.IsTrailingStopActive && stock.ProfitRate >= settings.TrailingTriggerPrice)
-                    {
-                        stock.IsTrailingStopActive = true;
-                        stock.HighestPriceSincePurchase = stock.CurrentPrice;
-                        Logger.Instance.Add($"[{strategy.ConditionName}] [매도] {stock.StockName} 트레일링 스탑 활성화 (감시 시작가: {stock.HighestPriceSincePurchase:N0})");
-                    }
-                    if (stock.IsTrailingStopActive)
-                    {
-                        stock.HighestPriceSincePurchase = Math.Max(stock.HighestPriceSincePurchase, stock.CurrentPrice);
-                        double stopPrice = stock.HighestPriceSincePurchase * (1 - settings.TrailingStopRate / 100);
-                        if (stock.CurrentPrice <= stopPrice)
-                            sellReason = $"트레일링 스탑({settings.TrailingStopRate}%) 발동 (최고가: {stock.HighestPriceSincePurchase:N0})";
-                    }
-                    break;
-                case "스탑로스":
-                    if (stock.ProfitRate <= -Math.Abs(settings.StopLossTargetPrice))
-                    {
-                        sellReason = $"스탑로스({settings.StopLossTargetPrice}%) 도달";
-                    }
-                    else
-                    {
-                        if (!stock.IsStopLossMonitoring && stock.ProfitRate >= settings.StopLossPreservePrice)
-                        {
-                            stock.IsStopLossMonitoring = true;
-                            stock.StopLossMonitoringStartTime = DateTime.Now;
-                            Logger.Instance.Add($"[{strategy.ConditionName}] [매도] {stock.StockName} 스탑로스 보존 감시 시작.");
-                        }
-                        if (stock.IsStopLossMonitoring && DateTime.Now > stock.StopLossMonitoringStartTime?.AddMinutes(1))
-                        {
-                            if (stock.ProfitRate < settings.StopLossPreservePrice)
-                                sellReason = $"스탑로스 보존({settings.StopLossPreservePrice}%) 이탈";
-                        }
-                    }
-                    break;
-            }
-
-            // 2. 반등 컷 조건 확인 (다른 매도 조건이 충족되지 않았을 경우)
-            if (string.IsNullOrEmpty(sellReason) && settings.UseReboundCut)
-            {
-                if (!stock.IsReboundCutActive && stock.ProfitRate <= -Math.Abs(settings.ReboundCutMinProfitRate))
-                {
-                    stock.IsReboundCutActive = true;
-                    stock.LowestPriceSinceReboundCutActive = stock.CurrentPrice;
-                    Logger.Instance.Add($"[{strategy.ConditionName}] [매도] {stock.StockName} 반등 컷 감시 시작 (최저가: {stock.LowestPriceSinceReboundCutActive:N0})");
-                }
-
-                if (stock.IsReboundCutActive)
-                {
-                    stock.LowestPriceSinceReboundCutActive = Math.Min(stock.LowestPriceSinceReboundCutActive, stock.CurrentPrice);
-
-                    // 조건 1: 반등 비율 기준
-                    if ((stock.CurrentPrice / stock.LowestPriceSinceReboundCutActive - 1) * 100 >= settings.ReboundCutRate)
-                    {
-                        sellReason = $"반등 컷 (비율 {settings.ReboundCutRate}%) 충족";
-                    }
-                    // 조건 2: 반등량 기준
-                    else if (stock.CurrentPrice >= stock.LowestPriceSinceReboundCutActive + settings.ReboundCutAmount)
-                    {
-                        sellReason = $"반등 컷 (금액 {settings.ReboundCutAmount:N0}원) 충족";
-                    }
-                }
-            }
-
-            // 3. 매도 주문 실행
-            if (!string.IsNullOrEmpty(sellReason))
-            {
-                await ExecuteSellOrderAsync(account, stock, settings, strategy.ConditionName, sellReason);
-            }
-        }
-
-        // [NEW] 매도 주문 실행을 위한 헬퍼 메서드
-        private async Task ExecuteSellOrderAsync(AccountInfo account, HoldingStock stock, SellSettings settings, string conditionName, string reason)
-        {
-            var (orderPrice, orderType) = GetOrderPriceAndType(settings.OrderType, stock);
-
-            Logger.Instance.Add($"[{conditionName}] [매도] 조건 충족: {stock.StockName} ({reason}) -> {settings.OrderType} 주문 실행 (가격: {orderPrice:N0})");
-
-            bool success = await _apiService.SendSellOrderAsync(account, stock.StockCode, stock.TradableQuantity, orderPrice, orderType);
-            if (success)
-            {
-                Application.Current.Dispatcher.Invoke(() =>
-                {
-                    stock.TradableQuantity = 0; // 중복 주문 방지를 위해 즉시 0으로 설정
-                });
-            }
-        }
-
-        // [NEW] 주문 유형에 따른 가격과 API 타입을 반환하는 헬퍼 메서드
-        private (double price, string apiOrderType) GetOrderPriceAndType(string orderType, HoldingStock stock)
-        {
-            switch (orderType)
-            {
-                case "시장가":
-                    return (0, "3");
-                case "현재가-1틱":
-                    return (stock.CurrentPrice - GetTickSize(stock.CurrentPrice), "0");
-                case "매수1호가":
-                    return (stock.BestBidPrice, "0");
-                case "현재가":
-                default:
-                    return (stock.CurrentPrice, "0");
-            }
-        }
-
-        // [NEW] 현재가에 따른 호가 단위를 반환하는 헬퍼 메서드
-        private double GetTickSize(double currentPrice)
-        {
-            if (currentPrice < 2000) return 1;
-            if (currentPrice < 5000) return 5;
-            if (currentPrice < 20000) return 10;
-            if (currentPrice < 50000) return 50;
-            if (currentPrice < 200000) return 100;
-            if (currentPrice < 500000) return 500;
-            return 1000;
-        }
-
 
         private async Task<List<SearchedStock>> FetchAllStockDataAsync(List<SearchedStock> initialList)
         {
@@ -320,11 +195,11 @@ namespace All_New_Jongbet
 
             var stockCodes = initialList.Select(s => s.StockCode).ToArray();
             var detailedStocks = await _apiService.GetWatchlistDetailsAsync(primaryAccount, stockCodes);
-            await Task.Delay(MainWindow.ApiRequestDelay);
+            await Task.Delay(300);
 
             var chartResults = new ConcurrentDictionary<string, List<DailyChartData>>();
             var tasks = new List<Task>();
-            string today = DateTime.Today.ToString("yyyyMMdd");
+            string yesterday = DateTime.Today.AddDays(-1).ToString("yyyyMMdd");
 
             foreach (var stock in detailedStocks)
             {
@@ -334,7 +209,7 @@ namespace All_New_Jongbet
                 _apiRequestScheduler.EnqueueRequest(async (acc) => {
                     try
                     {
-                        var chartData = await _apiService.GetDailyChartAsync(acc, stock.StockCode, today);
+                        var chartData = await _apiService.GetDailyChartAsync(acc, stock.StockCode, yesterday);
                         chartResults[stock.StockCode] = chartData;
                     }
                     catch (Exception ex)
@@ -407,7 +282,7 @@ namespace All_New_Jongbet
             if (maxStocksToBuy == 0) return new List<SearchedStock>();
 
             var selectedStocks = stocks.Take(maxStocksToBuy).ToList();
-            Logger.Instance.Add($"[{_strategies.FirstOrDefault(s => s.AccountNumber == account.AccountNumber)?.ConditionName}] [매수] 매수 비중({settings.BuyWeight}%)에 따라 최대 {maxStocksToBuy}개 종목을 주문합니다.");
+            Logger.Instance.Add($" -> 매수 비중({settings.BuyWeight}%)에 따라 최대 {maxStocksToBuy}개 종목을 매수합니다.");
 
             double budgetPerStock = account.EstimatedDepositAsset * (settings.BuyWeight / 100.0);
             foreach (var stock in selectedStocks)
@@ -421,38 +296,14 @@ namespace All_New_Jongbet
             return selectedStocks.Where(s => s.OrderQuantity > 0).ToList();
         }
 
-        public async Task<List<ConditionInfo>> GetConditionListAsync()
+        public Task CheckSellConditionsAsync(AccountInfo account, HoldingStock stock)
         {
-            try
-            {
-                var requestPacket = new { trnm = "CNSRLST" };
-                var response = await SendWsRequestAsync("CNSRLST", requestPacket);
-
-                if (response?["return_code"]?.ToString() == "0")
-                {
-                    var conditions = new List<ConditionInfo>();
-                    if (response["data"] is JObject data && data["list"] is JArray list)
-                    {
-                        foreach (var item in list)
-                        {
-                            conditions.Add(new ConditionInfo
-                            {
-                                Index = item["seq"]?.ToString(),
-                                Name = item["cnsr_nm"]?.ToString()
-                            });
-                        }
-                    }
-                    Logger.Instance.Add($"조건검색식 목록 조회 성공: {conditions.Count}개");
-                    return conditions;
-                }
-                Logger.Instance.Add($"[오류] 조건검색식 목록 조회 실패: {response?["return_msg"]}");
-            }
-            catch (Exception ex)
-            {
-                Logger.Instance.Add($"[오류] 조건검색식 목록 조회 중 예외: {ex.Message}");
-            }
-            return new List<ConditionInfo>();
+            Logger.Instance.Add($"[{account.AccountNumber}] {stock.StockName}({stock.StockCode}) 시세 변경 감지 -> 매도 조건 확인 실행... (현재가: {stock.CurrentPrice:N0})");
+            return Task.CompletedTask;
         }
+
+        // [REMOVED] 이 메서드는 MainWindow.xaml.cs로 이동하여 삭제
+        // public async Task<List<ConditionInfo>> GetConditionListAsync() { ... }
 
         private async Task<List<SearchedStock>> GetConditionSearchResultAsync(StrategyInfo strategy)
         {

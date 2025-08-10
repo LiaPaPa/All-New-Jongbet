@@ -12,7 +12,7 @@ using System.Windows.Controls;
 
 namespace All_New_Jongbet
 {
-    public partial class SystemSettingsPage : Page
+    public partial class SystemSettingsPage : UserControl // Page -> UserControl
     {
         private MainWindow _mainWindow;
         public ObservableCollection<StrategyInfo> StrategyList { get; set; }
@@ -66,13 +66,11 @@ namespace All_New_Jongbet
             }
         }
 
-        // [수정] 'Add Strategy' 버튼 클릭 이벤트 핸들러
         private void AddStrategy_Click(object sender, RoutedEventArgs e)
         {
             if (AccountsDataGrid.SelectedItem is AccountInfo selectedAccount &&
                 ConditionsDataGrid.SelectedItem is ConditionInfo selectedCondition)
             {
-                // 중복되지 않는 새로운 전략 번호 생성 (리스트가 비어있으면 1, 아니면 최대값+1)
                 int nextStrategyNumber = StrategyList.Any() ? StrategyList.Max(s => s.StrategyNumber) + 1 : 1;
 
                 var newStrategy = new StrategyInfo
@@ -81,7 +79,7 @@ namespace All_New_Jongbet
                     AccountNumber = selectedAccount.AccountNumber,
                     ConditionIndex = selectedCondition.Index,
                     ConditionName = selectedCondition.Name,
-                    Status = "Inactive", // 초기 상태는 'Inactive'
+                    Status = "Inactive",
                     CreationDate = string.Empty,
                     LastExecutionDate = DateTime.MinValue
                 };
@@ -96,7 +94,6 @@ namespace All_New_Jongbet
             }
         }
 
-        // [수정] 'Save Strategy' 버튼 클릭 이벤트 핸들러
         private void SaveStrategy_Click(object sender, RoutedEventArgs e)
         {
             var inactiveStrategies = StrategyList.Where(s => s.Status == "Inactive").ToList();
@@ -109,11 +106,10 @@ namespace All_New_Jongbet
             foreach (var strategy in inactiveStrategies)
             {
                 strategy.CreationDate = DateTime.Now.ToString("yyyy-MM-dd");
-                strategy.Status = "Active"; // 상태를 'Active'로 변경
+                strategy.Status = "Active";
                 Logger.Instance.Add($"{strategy.StrategyNumber}번 전략의 상태를 Active로 변경하고 저장합니다.");
             }
 
-            // 수정된 전체 전략 리스트를 파일에 저장
             StrategyRepository.Save(StrategyList);
             MessageBox.Show("신규 전략이 성공적으로 저장 및 활성화되었습니다.", "저장 완료");
 
@@ -125,22 +121,36 @@ namespace All_New_Jongbet
             if (StrategyMatchingDataGrid.SelectedItem is StrategyInfo selectedStrategy)
             {
                 StrategyList.Remove(selectedStrategy);
-                StrategyRepository.Save(StrategyList); // 삭제 후에도 파일 저장
+                StrategyRepository.Save(StrategyList);
                 UpdateAllButtonStates();
             }
         }
 
+        // [CHANGED] 그리드 선택 변경 이벤트 핸들러 로직 수정
         private void DataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (sender == AccountsDataGrid && AccountsDataGrid.SelectedItem is AccountInfo selectedAccount)
+            // 계좌 목록에서 선택이 변경되었을 때
+            if (sender == AccountsDataGrid)
             {
-                ConditionsDataGrid.ItemsSource = selectedAccount.Conditions;
+                // 선택된 계좌가 있으면
+                if (AccountsDataGrid.SelectedItem is AccountInfo selectedAccount)
+                {
+                    // 조건식 목록을 해당 계좌의 것으로 업데이트
+                    ConditionsDataGrid.ItemsSource = selectedAccount.Conditions;
+                }
+                else
+                {
+                    // 선택이 풀리면 조건식 목록을 비움
+                    ConditionsDataGrid.ItemsSource = null;
+                }
             }
+            // 어떤 그리드에서든 선택이 변경되면 버튼 상태를 업데이트
             UpdateAllButtonStates();
         }
 
         private void UpdateAllButtonStates()
         {
+            // 두 그리드 모두에서 항목이 1개씩 선택되었을 때만 AddStrategyButton 활성화
             AddStrategyButton.IsEnabled = AccountsDataGrid.SelectedItem != null && ConditionsDataGrid.SelectedItem != null;
             SaveStrategyButton.IsEnabled = StrategyList.Any(s => s.Status == "Inactive");
             DeleteStrategyButton.IsEnabled = StrategyMatchingDataGrid.SelectedItem != null;

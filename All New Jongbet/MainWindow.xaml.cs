@@ -14,7 +14,10 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
-
+using System.Windows.Input;
+using All_New_Jongbet.Properties;
+using System.Text;
+using System.Drawing;
 namespace All_New_Jongbet
 {
     public partial class MainWindow : Window, INotifyPropertyChanged
@@ -46,10 +49,31 @@ namespace All_New_Jongbet
         public event PropertyChangedEventHandler PropertyChanged;
         public ObservableCollection<OrderHistoryItem> AllOrderHistoryList { get; set; }
 
+        private bool _isSetupMenuActive;
+        public bool IsSetupMenuActive
+        {
+            get => _isSetupMenuActive;
+            set
+            {
+                _isSetupMenuActive = value;
+                OnPropertyChanged(nameof(IsSetupMenuActive));
+            }
+        }
+
+        private Timer _notificationTimer;
+        private bool _isNotificationSentToday = false;
+        private readonly TelegramApiService _telegramService; // Telegram 서비스 객체 추가
+
+        private readonly ChartGenerator _chartGenerator;
+
         public MainWindow()
         {
             InitializeComponent();
             this.DataContext = this;
+
+            _telegramService = new TelegramApiService(); // 생성자에서 초기화
+            _telegramService.OnMessageReceived += HandleTelegramMessage;
+            _chartGenerator = new ChartGenerator();
 
             _apiService = new KiwoomApiService();
             _orderNotificationQueue = new ConcurrentQueue<Notification>();
@@ -71,6 +95,7 @@ namespace All_New_Jongbet
             _logsPage = new LogsPage(OrderLogList);
             _settingsPage = new SettingsPage();
 
+
             this.Loaded += async (s, e) =>
             {
                 Logger.Instance.Add("메인 윈도우 로딩 완료.");
@@ -88,11 +113,11 @@ namespace All_New_Jongbet
                     var primaryWs = GetWebSocketByAppKey(primaryAppKey);
                     if (primaryWs != null)
                     {
-                        _tradingManager = new TradingManager(_apiService, StrategyList, AccountManageList, _apiRequestScheduler, primaryWs, _wsResponseTasks, OrderQueList);
-                        await FetchAllConditionListsAsync();
+                        _tradingManager = new TradingManager(_apiService, StrategyList, AccountManageList, _apiRequestScheduler, primaryWs, _wsResponseTasks);
                     }
                 }
 
+                await FetchAllConditionListsAsync();
                 await FetchAllAccountBalancesAsync();
                 await FetchAllOrderHistoriesAsync();
                 await FetchAllDailyAssetHistoriesAsync();
@@ -111,8 +136,13 @@ namespace All_New_Jongbet
                 UpdateStatus("Auto Trading Ready", "StatusLabel");
 
                 SetSidebarButtonsEnabled(true);
-                MainFrame.Navigate(_dashboardPage);
+                MainContentControl.Content = _dashboardPage;
                 DashboardButton.IsChecked = true;
+
+                // [NEW] 프로그램 시작 시 타이머 설정
+                SetupNotificationTimer();
+
+                await InitializeTelegramBot();
             };
 
             _ = ProcessNotificationQueueAsync();
@@ -222,12 +252,17 @@ namespace All_New_Jongbet
         {
             var clickedButton = sender as ToggleButton;
             if (clickedButton == null) return;
+
             var allToggleButtons = new[] { DashboardButton, TradeSetupButton, StrategySetupButton, LogsButton };
             foreach (var button in allToggleButtons)
             {
                 if (button != clickedButton) button.IsChecked = false;
             }
             clickedButton.IsChecked = true;
+
+            // Setup 하위 메뉴 활성화 상태 업데이트
+            IsSetupMenuActive = TradeSetupButton.IsChecked == true || StrategySetupButton.IsChecked == true;
+
             NavigateToPage(clickedButton.Name);
         }
 
@@ -235,11 +270,16 @@ namespace All_New_Jongbet
         {
             var clickedButton = sender as Button;
             if (clickedButton == null) return;
+
             var allToggleButtons = new[] { DashboardButton, TradeSetupButton, StrategySetupButton, LogsButton };
             foreach (var button in allToggleButtons)
             {
                 button.IsChecked = false;
             }
+
+            // 다른 메뉴가 선택되었으므로 Setup 메뉴 비활성화
+            IsSetupMenuActive = false;
+
             NavigateToPage(clickedButton.Name);
         }
 
@@ -251,11 +291,11 @@ namespace All_New_Jongbet
             }
             switch (buttonName)
             {
-                case "DashboardButton": MainFrame.Navigate(_dashboardPage); break;
-                case "TradeSetupButton": MainFrame.Navigate(_tradeSetupPage); break;
-                case "StrategySetupButton": MainFrame.Navigate(_systemSettingsPage); break;
-                case "LogsButton": MainFrame.Navigate(_logsPage); break;
-                case "SettingsButton": MainFrame.Navigate(_settingsPage); break;
+                case "DashboardButton": MainContentControl.Content = _dashboardPage; break;
+                case "TradeSetupButton": MainContentControl.Content = _tradeSetupPage; break;
+                case "StrategySetupButton": MainContentControl.Content = _systemSettingsPage; break;
+                case "LogsButton": MainContentControl.Content = _logsPage; break;
+                case "SettingsButton": MainContentControl.Content = _settingsPage; break;
             }
         }
 
@@ -342,15 +382,84 @@ namespace All_New_Jongbet
 
         public async Task FetchAllConditionListsAsync()
         {
-            Logger.Instance.Add("모든 계좌의 조건식 목록 조회를 시작합니다.");
-            var allConditions = await _tradingManager.GetConditionListAsync();
+            Logger.Instance.Add("계좌별 조건검색식 목록 조회를 시작합니다.");
 
-            if (allConditions != null)
+            // 활성화된 각 계좌에 대해 순차적으로 조회
+            foreach (var account in AccountManageList.Where(acc => acc.TokenStatus == "Success"))
             {
-                foreach (var account in AccountManageList.Where(acc => acc.TokenStatus == "Success"))
+                // 해당 계좌의 AppKey에 맞는 웹소켓 클라이언트를 찾음
+                if (_realtimeClients.TryGetValue(account.AppKey, out var wsClient))
                 {
-                    account.Conditions = allConditions;
+                    try
+                    {
+                        var requestPacket = new { trnm = "CNSRLST" };
+                        // 해당 클라이언트의 웹소켓으로 요청 전송
+                        var response = await SendWsRequestAsync(wsClient.WebSocket, "CNSRLST", requestPacket);
+
+                        if (response?["return_code"]?.ToString() == "0")
+                        {
+                            var conditions = new List<ConditionInfo>();
+                            if (response["data"] is JArray dataArray)
+                            {
+                                foreach (var item in dataArray.OfType<JArray>())
+                                {
+                                    if (item.Count >= 2)
+                                    {
+                                        conditions.Add(new ConditionInfo
+                                        {
+                                            Index = item[0]?.ToString(),
+                                            Name = item[1]?.ToString()
+                                        });
+                                    }
+                                }
+                            }
+                            // 조회된 결과를 해당 계좌의 Conditions 속성에 저장
+                            account.Conditions = conditions;
+                            Logger.Instance.Add($"[{account.AccountNumber}] 조건검색식 목록 조회 성공: {conditions.Count}개");
+                        }
+                        else
+                        {
+                            Logger.Instance.Add($"[{account.AccountNumber}] 조건검색식 목록 조회 실패: {response?["return_msg"]}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Instance.Add($"[{account.AccountNumber}] 조건검색식 목록 조회 중 예외 발생: {ex.Message}");
+                    }
+                    // API 요청 제한을 피하기 위한 딜레이
+                    await Task.Delay(300);
                 }
+                else
+                {
+                    Logger.Instance.Add($"[오류] {account.AccountNumber} 계좌에 해당하는 웹소켓 클라이언트를 찾을 수 없습니다.");
+                }
+            }
+        }
+
+        private async Task<JObject> SendWsRequestAsync(ClientWebSocket ws, string trnm, object requestPacket)
+        {
+            var tcs = new TaskCompletionSource<JObject>();
+            _wsResponseTasks.TryAdd(trnm, tcs);
+
+            try
+            {
+                await _apiService.SendWsMessageAsync(ws, requestPacket);
+                using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15)))
+                {
+                    var completedTask = await Task.WhenAny(tcs.Task, Task.Delay(-1, cts.Token));
+                    if (completedTask == tcs.Task)
+                    {
+                        return await tcs.Task;
+                    }
+                    else
+                    {
+                        throw new TimeoutException($"{trnm} 요청 응답 시간 초과.");
+                    }
+                }
+            }
+            finally
+            {
+                _wsResponseTasks.TryRemove(trnm, out _);
             }
         }
 
@@ -597,7 +706,6 @@ namespace All_New_Jongbet
                 int.TryParse(values["900"]?.ToString(), out int orderQuantity);
                 int.TryParse(values["902"]?.ToString(), out int unfilledQuantity);
                 double.TryParse(values["901"]?.ToString(), out double orderPrice);
-                // CHANGED: 906(매매구분) -> 905(주문구분)으로 필드 변경
                 string orderTypeCode = values["905"]?.ToString();
                 string timeHHMMSS = values["908"]?.ToString();
                 int.TryParse(values["911"]?.ToString(), out int executedQuantity);
@@ -765,6 +873,290 @@ namespace All_New_Jongbet
         protected virtual void OnPropertyChanged(string propertyName)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+        // 창 드래그 이동
+        private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ButtonState == MouseButtonState.Pressed)
+            {
+                this.DragMove();
+            }
+        }
+
+        // 닫기 버튼
+        private void CloseButton_Click(object sender, RoutedEventArgs e)
+        {
+            Application.Current.Shutdown();
+        }
+
+        // 최대화/복원 버튼
+        private void MaximizeButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (this.WindowState == WindowState.Maximized)
+            {
+                this.WindowState = WindowState.Normal;
+                // 최대화/복원 버튼 아이콘 변경 (필요 시)
+                // MaximizeButton.Content = "&#xE922;"; 
+            }
+            else
+            {
+                this.WindowState = WindowState.Maximized;
+                // 최대화/복원 버튼 아이콘 변경 (필요 시)
+                // MaximizeButton.Content = "&#xE923;";
+            }
+        }
+
+        // 최소화 버튼
+        private void MinimizeButton_Click(object sender, RoutedEventArgs e)
+        {
+            this.WindowState = WindowState.Minimized;
+        }
+
+        public void SetupNotificationTimer()
+        {
+            _notificationTimer?.Dispose();
+            _notificationTimer = new Timer(NotificationTimer_Callback, null, TimeSpan.Zero, TimeSpan.FromMinutes(1));
+            Logger.Instance.Add("텔레그램 알림 스케줄러를 시작합니다.");
+        }
+
+        private void NotificationTimer_Callback(object state)
+        {
+            var now = DateTime.Now;
+
+            if (now.Hour == 0 && now.Minute == 0)
+            {
+                _isNotificationSentToday = false;
+            }
+
+            if (!Settings.Default.IsTelegramNotificationEnabled || _isNotificationSentToday)
+            {
+                return;
+            }
+
+            // 시간 형식을 HH:mm으로 비교
+            if (now.ToString("HH:mm") == Settings.Default.TelegramNotificationTime)
+            {
+                _isNotificationSentToday = true;
+                SendTelegramSummary();
+            }
+        }
+
+        private async void SendTelegramSummary()
+        {
+            string botToken = Settings.Default.TelegramBotToken;
+            string chatId = Settings.Default.TelegramChatId;
+
+            if (string.IsNullOrEmpty(botToken) || string.IsNullOrEmpty(chatId))
+            {
+                Logger.Instance.Add("[텔레그램 알림] 봇 토큰 또는 채팅 ID가 없어 메시지를 보낼 수 없습니다.");
+                return;
+            }
+
+            Logger.Instance.Add("[텔레그램 알림] 계좌 현황 요약 메시지를 준비합니다.");
+
+            double totalAssets = AccountManageList.Sum(acc => acc.EstimatedDepositAsset);
+            double totalProfitLoss = AccountManageList.Sum(acc => acc.TotalEvaluationProfitLoss);
+
+            string message = $"🔔 Jongbet 데일리 리포트 ({DateTime.Now:yyyy-MM-dd HH:mm})\n\n" +
+                             $"- 총 자산: {totalAssets:N0}원\n" +
+                             $"- 총 평가손익: {totalProfitLoss:N0}원\n\n" +
+                             $"오늘도 좋은 하루 되세요!";
+
+            await _telegramService.SendMessageAsync(botToken, chatId, message);
+        }
+
+        // [NEW] 텔레그램 봇 초기화 및 메시지 수신 시작
+        private async Task InitializeTelegramBot()
+        {
+            string botToken = Settings.Default.TelegramBotToken;
+            string chatId = Settings.Default.TelegramChatId;
+
+            if (string.IsNullOrEmpty(botToken) || string.IsNullOrEmpty(chatId))
+            {
+                Logger.Instance.Add("[텔레그램] 봇 토큰 또는 채팅 ID가 설정되지 않아 봇을 시작할 수 없습니다.");
+                return;
+            }
+
+            // 1. 봇 명령어 메뉴 설정
+            await _telegramService.SetCommandsAsync(botToken);
+
+            // 2. [NEW] 본격적인 수신 시작 전, 쌓여있는 이전 메시지들을 정리
+            await _telegramService.ClearPendingMessagesAsync(botToken);
+
+            // 3. 메시지 수신 시작
+            _ = _telegramService.StartReceivingMessagesAsync(botToken, _appCts.Token);
+
+            // 4. 프로그램 시작 알림 메시지 전송
+            string welcomeMessage = $"✅ Jongbet 프로그램이 연결되었습니다.";
+            await _telegramService.SendMessageAsync(botToken, chatId, welcomeMessage, true);
+        }
+
+
+        // [NEW] 텔레그램 메시지(명령어)를 처리하는 핸들러
+        private async void HandleTelegramMessage(string chatId, string command)
+        {
+            if (chatId != Settings.Default.TelegramChatId) return;
+
+            string botToken = Settings.Default.TelegramBotToken;
+            string responseMessage = "알 수 없는 명령입니다.";
+
+            switch (command)
+            {
+                case "Daily Report": // 슬래시(/) 제거
+                    double totalAssets = AccountManageList.Sum(acc => acc.EstimatedDepositAsset);
+                    double dailyChange = AccountManageList.Sum(acc =>
+                    {
+                        if (acc.DailyAssetList != null && acc.DailyAssetList.Count >= 2)
+                        {
+                            var today = acc.DailyAssetList.Last();
+                            var yesterday = acc.DailyAssetList.ElementAt(acc.DailyAssetList.Count - 2);
+                            return today.EstimatedAsset - yesterday.EstimatedAsset;
+                        }
+                        return 0;
+                    });
+                    responseMessage = $"📊 데일리 리포트 ({DateTime.Now:MM-dd HH:mm})\n\n" +
+                                      $"- 총 자산: {totalAssets:N0}원\n" +
+                                      $"- 당일 손익: {dailyChange:N0}원";
+                    break;
+
+                case "Account Status": // 슬래시(/) 제거
+                    var sb = new StringBuilder();
+                    sb.AppendLine($"📋 전체 계좌 현황 ({DateTime.Now:MM-dd HH:mm})\n");
+                    foreach (var acc in AccountManageList.Where(a => a.TokenStatus == "Success"))
+                    {
+                        sb.AppendLine($"--- [{acc.AccountNumber}] ---");
+                        sb.AppendLine($"- 총자산: {acc.EstimatedDepositAsset:N0}원");
+                        sb.AppendLine($"- 평가손익: {acc.TotalEvaluationProfitLoss:N0}원");
+
+                        double accDailyChange = 0;
+                        if (acc.DailyAssetList != null && acc.DailyAssetList.Count >= 2)
+                        {
+                            var today = acc.DailyAssetList.Last();
+                            var yesterday = acc.DailyAssetList.ElementAt(acc.DailyAssetList.Count - 2);
+                            accDailyChange = today.EstimatedAsset - yesterday.EstimatedAsset;
+                        }
+                        sb.AppendLine($"- 당일손익: {accDailyChange:N0}원");
+
+                        if (acc.HoldingStockList != null && acc.HoldingStockList.Any())
+                        {
+                            sb.AppendLine("- 보유종목:");
+                            foreach (var stock in acc.HoldingStockList)
+                            {
+                                sb.AppendLine($"  • {stock.StockName} ({stock.ProfitRate:F2}%)");
+                            }
+                        }
+                        else
+                        {
+                            sb.AppendLine("- 보유종목: 없음");
+                        }
+                        sb.AppendLine();
+                    }
+                    responseMessage = sb.ToString();
+                    break;
+
+                case "Asset Trend":
+                    Logger.Instance.Add("[텔레그램] Asset Trend 차트 생성 요청 수신 (1개월, 3개월, 6개월).");
+
+                    var aggregatedAssets = AccountManageList
+                        .Where(acc => acc.DailyAssetList != null)
+                        .SelectMany(acc => acc.DailyAssetList)
+                        .GroupBy(d => d.Date)
+                        .Select(g => new DailyAssetInfo { Date = g.Key, EstimatedAsset = g.Sum(d => d.EstimatedAsset) })
+                        .OrderBy(d => d.Date)
+                        .ToList();
+
+                    var chartGenerator = new ChartGenerator();
+                    var tempFiles = new List<string>();
+
+                    // 1개월 데이터
+                    var last1MonthData = aggregatedAssets.Where(d => d.DateObject >= DateTime.Now.AddMonths(-1)).OrderBy(d => d.DateObject).ToList();
+                    string path1Month = chartGenerator.CreateAssetTrendChartImage(last1MonthData, "최근 1개월 자산 추이");
+                    if (!string.IsNullOrEmpty(path1Month)) tempFiles.Add(path1Month);
+
+                    // 3개월 데이터
+                    var last3MonthsData = aggregatedAssets.Where(d => d.DateObject >= DateTime.Now.AddMonths(-3)).OrderBy(d => d.DateObject).ToList();
+                    string path3Months = chartGenerator.CreateAssetTrendChartImage(last3MonthsData, "최근 3개월 자산 추이");
+                    if (!string.IsNullOrEmpty(path3Months)) tempFiles.Add(path3Months);
+
+                    // 6개월 데이터
+                    var last6MonthsData = aggregatedAssets.Where(d => d.DateObject >= DateTime.Now.AddMonths(-6)).OrderBy(d => d.DateObject).ToList();
+                    string path6Months = chartGenerator.CreateAssetTrendChartImage(last6MonthsData, "최근 6개월 자산 추이");
+                    if (!string.IsNullOrEmpty(path6Months)) tempFiles.Add(path6Months);
+
+                    if (tempFiles.Any())
+                    {
+                        // 이미지들을 하나로 합치기 (세로로)
+                        string mergedImagePath = MergeImagesVertically(tempFiles);
+                        if (!string.IsNullOrEmpty(mergedImagePath))
+                        {
+                            await _telegramService.SendPhotoAsync(botToken, chatId, mergedImagePath, "최근 1개월, 3개월, 6개월 자산 추이입니다.");
+                            File.Delete(mergedImagePath); // 병합된 이미지 삭제
+                        }
+                        foreach (var file in tempFiles)
+                        {
+                            File.Delete(file); // 개별 차트 이미지 삭제
+                        }
+                    }
+                    else
+                    {
+                        await _telegramService.SendMessageAsync(botToken, chatId, "차트를 생성할 데이터가 부족합니다.");
+                    }
+                    break; // 메시지 중복 전송 방지를 위해 여기서 종료
+
+                case "Start": // 슬래시(/) 제거 및 명령어 변경
+                    _tradingManager?.StartTrading();
+                    responseMessage = "✅ 자동매매를 시작합니다.";
+                    break;
+
+                case "Stop": // 슬래시(/) 제거 및 명령어 변경
+                    _tradingManager?.StopTrading();
+                    responseMessage = "🛑 오늘 하루 자동매매를 중지합니다.";
+                    break;
+            }
+
+            if (responseMessage != "알 수 없는 명령입니다.") // 응답 메시지가 알 수 없는 명령어가 아닐 때만 전송
+            {
+                await _telegramService.SendMessageAsync(botToken, chatId, responseMessage);
+            }
+
+        }
+        private string MergeImagesVertically(List<string> imagePaths)
+        {
+            if (!imagePaths.Any()) return null;
+
+            try
+            {
+                List<System.Drawing.Bitmap> images = imagePaths.Select(System.Drawing.Image.FromFile).Cast<System.Drawing.Bitmap>().ToList();
+
+                int totalHeight = images.Sum(img => img.Height);
+                int maxWidth = images.Max(img => img.Width);
+
+                System.Drawing.Bitmap resultImage = new System.Drawing.Bitmap(maxWidth, totalHeight);
+
+                using (Graphics g = Graphics.FromImage(resultImage))
+                {
+                    g.Clear(System.Drawing.Color.White);
+
+                    int currentY = 0;
+                    foreach (System.Drawing.Bitmap img in images)
+                    {
+                        g.DrawImage(img, new System.Drawing.Point(0, currentY));
+                        currentY += img.Height;
+                        img.Dispose(); // 사용 후 바로 리소스 해제
+                    }
+                }
+
+                string mergedPath = Path.Combine(Path.GetTempPath(), $"merged_asset_trend_{DateTime.Now.Ticks}.png");
+                resultImage.Save(mergedPath, System.Drawing.Imaging.ImageFormat.Png);
+                resultImage.Dispose(); // 최종 이미지 리소스 해제
+
+                return mergedPath;
+            }
+            catch (Exception ex)
+            {
+                Logger.Instance.Add($"이미지 병합 중 오류 발생: {ex.Message}");
+                return null;
+            }
         }
     }
 }

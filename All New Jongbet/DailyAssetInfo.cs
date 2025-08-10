@@ -1,6 +1,8 @@
 ﻿// DailyAssetInfo.cs
 using Newtonsoft.Json;
+using System;
 using System.ComponentModel;
+using System.Globalization;
 
 namespace All_New_Jongbet
 {
@@ -14,12 +16,11 @@ namespace All_New_Jongbet
         public double EstimatedAsset
         {
             get => _estimatedAsset;
-            set
-            {
-                _estimatedAsset = value;
-                OnPropertyChanged(nameof(EstimatedAsset));
-            }
+            set { _estimatedAsset = value; OnPropertyChanged(nameof(EstimatedAsset)); }
         }
+
+        [JsonIgnore]
+        public DateTime DateObject => DateTime.ParseExact(Date, "yyyyMMdd", CultureInfo.InvariantCulture);
 
         public event PropertyChangedEventHandler PropertyChanged;
         protected virtual void OnPropertyChanged(string propertyName)

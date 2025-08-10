@@ -4,7 +4,7 @@ using System.Windows.Controls;
 
 namespace All_New_Jongbet
 {
-    public partial class LogsPage : Page
+    public partial class LogsPage : UserControl
     {
         public ObservableCollection<OrderLogItem> OrderLogList { get; set; }
 
