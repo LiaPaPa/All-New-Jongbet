@@ -105,7 +105,8 @@
                         </Border>
                     </Grid>
 
-                    <lvc:CartesianChart Grid.Row="1" Series="{Binding SeriesCollection}" LegendLocation="None" Height="220" Margin="0,15,0,-10">
+                    <!-- [FIXED] x:Name 속성 추가 -->
+                    <lvc:CartesianChart x:Name="AssetTrendChart" Grid.Row="1" Series="{Binding SeriesCollection}" LegendLocation="None" Height="220" Margin="0,15,0,-10">
                         <lvc:CartesianChart.DataTooltip>
                             <lvc:DefaultTooltip Style="{StaticResource LiveChartsTooltip}" BulletSize="10" ContentTemplate="{StaticResource ChartTooltipTemplate}"/>
                         </lvc:CartesianChart.DataTooltip>
@@ -148,6 +149,32 @@
 
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,15,0,0" Height="220">
                         <ItemsControl ItemsSource="{Binding OrderQueList}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,0,0,8" CornerRadius="4" Background="{StaticResource SecondaryBackground}" BorderThickness="3,0,0,0" BorderBrush="{Binding CardBrushKey, Converter={StaticResource ResourceKeyToBrushConverter}}">
+                                        <Grid Margin="12,8">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding StockName}" FontWeight="Bold" Foreground="{StaticResource PrimaryText}"/>
+                                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding OrderStatusDisplay}" FontWeight="SemiBold" HorizontalAlignment="Right" Foreground="{Binding CardBrushKey, Converter={StaticResource ResourceKeyToBrushConverter}}"/>
+                                            <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,4,0,0">
+                                                <TextBlock Text="{Binding OrderTypeDisplay}" Foreground="{StaticResource SecondaryText}" FontSize="11"/>
+                                                <TextBlock Text=" | " Foreground="{StaticResource BorderColor}" FontSize="11" Margin="5,0"/>
+                                                <TextBlock Text="{Binding OrderQuantity, StringFormat={}{0}주}" Foreground="{StaticResource SecondaryText}" FontSize="11"/>
+                                                <TextBlock Text=" @ " Foreground="{StaticResource BorderColor}" FontSize="11" Margin="5,0"/>
+                                                <TextBlock Text="{Binding OrderPrice, StringFormat=N0}" Foreground="{StaticResource SecondaryText}" FontSize="11"/>
+                                            </StackPanel>
+                                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding OrderTime}" FontSize="11" Foreground="{StaticResource SecondaryText}" HorizontalAlignment="Right" Margin="0,4,0,0"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
                 </Grid>
@@ -190,12 +217,12 @@
                                             <StackPanel VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding DailyProfitRate, StringFormat={}{0:P2}}" 
                                                            FontSize="14" FontWeight="Bold" HorizontalAlignment="Center"
-                                                           Foreground="White"
+                                                           Foreground="{Binding DailyProfitLossColor}"
                                                            Margin="0,0,0,5"/>
 
                                                 <TextBlock Text="{Binding DailyProfitLoss, StringFormat=N0}" 
                                                            FontSize="14" FontWeight="Bold" HorizontalAlignment="Center"
-                                                           Foreground="White"/>
+                                                           Foreground="{Binding DailyProfitLossColor}"/>
                                             </StackPanel>
                                         </Grid>
 

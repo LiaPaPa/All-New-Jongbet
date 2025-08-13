@@ -48,6 +48,9 @@ namespace All_New_Jongbet
             YFormatter = value => value.ToString("N0");
             OrderQueList = orderQue;
 
+            // [NEW] 차트 깜빡임 방지를 위해 애니메이션 비활성화
+            AssetTrendChart.DisableAnimations = true;
+
             this.DataContext = this;
         }
 
@@ -55,7 +58,6 @@ namespace All_New_Jongbet
         {
             if (accounts == null || !accounts.Any()) return;
 
-            // 1. 상단 카드 데이터 계산 (기존 로직 유지)
             double totalAssets = accounts.Sum(acc => acc.EstimatedDepositAsset);
             double totalProfitLoss = accounts.Sum(acc => acc.TotalEvaluationProfitLoss);
             _fullPeriodAggregatedAssets = accounts
@@ -83,8 +85,10 @@ namespace All_New_Jongbet
             TotalProfitLossText = totalProfitLoss.ToString("N0");
             DailyChangeText = dailyChange.ToString("N0");
             DailyChangeRateText = $"{dailyChangeRate:F2}%";
-            ProfitLossColor = totalProfitLoss >= 0 ? (Brush)FindResource("PositiveGreen") : (Brush)FindResource("NegativeRed");
-            DailyChangeColor = dailyChange >= 0 ? (Brush)FindResource("PositiveGreen") : (Brush)FindResource("NegativeRed");
+
+            // [CHANGED] 수정된 색상 키 사용
+            ProfitLossColor = totalProfitLoss >= 0 ? (Brush)FindResource("PositiveRedBrush") : (Brush)FindResource("NegativeBlueBrush");
+            DailyChangeColor = dailyChange >= 0 ? (Brush)FindResource("PositiveRedBrush") : (Brush)FindResource("NegativeBlueBrush");
 
             for (int i = 0; i < _fullPeriodAggregatedAssets.Count; i++)
             {
@@ -94,11 +98,9 @@ namespace All_New_Jongbet
                     _fullPeriodAggregatedAssets[i].ProfitRate = 0;
             }
 
-            // 2. Asset Trend 차트 데이터 업데이트
             FilterAndDisplayChart(30);
             if (Btn1m != null) Btn1m.IsChecked = true;
 
-            // 3. Holdings를 대체할 원형 그래프 데이터 가공
             AccountStatuses.Clear();
             foreach (var account in accounts.Where(a => a.TokenStatus == "Success"))
             {
@@ -121,26 +123,25 @@ namespace All_New_Jongbet
                     }
                 }
 
-                // [CHANGED] PieChart 데이터 생성
                 status.PieChartSeries = new SeriesCollection
-        {
-            new PieSeries
-            {
-                Title = "사용 비중",
-                Values = new ChartValues<double> { status.AssetUsageRatio },
-                Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#D81B60")),
-                DataLabels = false,
-                StrokeThickness = 0
-            },
-            new PieSeries
-            {
-                Title = "남은 비중",
-                Values = new ChartValues<double> { 100 - status.AssetUsageRatio },
-                Fill = new SolidColorBrush(Color.FromArgb(51, 74, 92, 197)), // #4a5cc5 with opacity
-                DataLabels = false,
-                StrokeThickness = 0
-            }
-        };
+                {
+                    new PieSeries
+                    {
+                        Title = "사용 비중",
+                        Values = new ChartValues<double> { status.AssetUsageRatio },
+                        Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#D81B60")),
+                        DataLabels = false,
+                        StrokeThickness = 0
+                    },
+                    new PieSeries
+                    {
+                        Title = "남은 비중",
+                        Values = new ChartValues<double> { 100 - status.AssetUsageRatio },
+                        Fill = new SolidColorBrush(Color.FromArgb(51, 74, 92, 197)),
+                        DataLabels = false,
+                        StrokeThickness = 0
+                    }
+                };
 
                 AccountStatuses.Add(status);
             }
@@ -154,29 +155,41 @@ namespace All_New_Jongbet
             var filteredData = _fullPeriodAggregatedAssets.Skip(Math.Max(0, _fullPeriodAggregatedAssets.Count - days)).ToList();
             var profitRateMapper = new CartesianMapper<DailyAssetInfo>()
                 .Y(point => point.ProfitRate)
-                .Fill(point => point.ProfitRate >= 0 ? (Brush)FindResource("PositiveGreen") : (Brush)FindResource("NegativeRed"));
+                // [CHANGED] 수정된 색상 키 사용
+                .Fill(point => point.ProfitRate >= 0 ? (Brush)FindResource("PositiveRedBrush") : (Brush)FindResource("NegativeBlueBrush"));
 
-            SeriesCollection.Clear();
-            SeriesCollection.Add(new LineSeries
+            // [CHANGED] 차트 깜빡임 현상 개선 로직
+            if (SeriesCollection.Count == 2)
             {
-                Title = "총 자산",
-                Values = new ChartValues<DailyAssetInfo>(filteredData),
-                Configuration = new CartesianMapper<DailyAssetInfo>().Y(point => point.EstimatedAsset),
-                PointGeometry = null,
-                StrokeThickness = 2,
-                Stroke = (Brush)FindResource("PrimaryText"),
-                Fill = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1), GradientStops = new GradientStopCollection { new GradientStop((Color)ColorConverter.ConvertFromString("#805e72e4"), 0.1), new GradientStop((Color)ColorConverter.ConvertFromString("#005e72e4"), 1) } },
-                ScalesYAt = 0,
-            });
-            SeriesCollection.Add(new ColumnSeries
+                // 이미 시리즈가 있으면 데이터만 업데이트
+                SeriesCollection[0].Values = new ChartValues<DailyAssetInfo>(filteredData);
+                SeriesCollection[1].Values = new ChartValues<DailyAssetInfo>(filteredData);
+            }
+            else
             {
-                Title = "일별 수익률",
-                Values = new ChartValues<DailyAssetInfo>(filteredData),
-                Configuration = profitRateMapper,
-                MaxColumnWidth = 5,
-                ScalesYAt = 1,
-                DataLabels = false,
-            });
+                // 시리즈가 없으면 새로 생성
+                SeriesCollection.Clear();
+                SeriesCollection.Add(new LineSeries
+                {
+                    Title = "총 자산",
+                    Values = new ChartValues<DailyAssetInfo>(filteredData),
+                    Configuration = new CartesianMapper<DailyAssetInfo>().Y(point => point.EstimatedAsset),
+                    PointGeometry = null,
+                    StrokeThickness = 2,
+                    Stroke = (Brush)FindResource("PrimaryText"),
+                    Fill = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1), GradientStops = new GradientStopCollection { new GradientStop((Color)ColorConverter.ConvertFromString("#805e72e4"), 0.1), new GradientStop((Color)ColorConverter.ConvertFromString("#005e72e4"), 1) } },
+                    ScalesYAt = 0,
+                });
+                SeriesCollection.Add(new ColumnSeries
+                {
+                    Title = "일별 수익률",
+                    Values = new ChartValues<DailyAssetInfo>(filteredData),
+                    Configuration = profitRateMapper,
+                    MaxColumnWidth = 5,
+                    ScalesYAt = 1,
+                    DataLabels = false,
+                });
+            }
 
             Labels = filteredData.Select(d => DateTime.ParseExact(d.Date, "yyyyMMdd", null).ToString("MM-dd")).ToArray();
             OnPropertyChanged(nameof(Labels));
@@ -208,17 +221,14 @@ namespace All_New_Jongbet
 
         private void AccountChart_Click(object sender, RoutedEventArgs e)
         {
-            // 클릭된 버튼에서 AccountStatusViewModel 데이터를 가져옴
             if ((sender as FrameworkElement)?.DataContext is AccountStatusViewModel selectedStatus)
             {
-                // MainWindow에 있는 전체 계좌 목록에서 일치하는 계좌 정보를 찾음
                 var mainWindow = (MainWindow)Application.Current.MainWindow;
                 var selectedAccount = mainWindow.AccountManageList
                                         .FirstOrDefault(acc => acc.AccountNumber == selectedStatus.AccountNumber);
 
                 if (selectedAccount != null)
                 {
-                    // 찾은 계좌 정보를 전달하여 새 창을 열고 보여줌
                     var holdingsWindow = new HoldingsWindow(selectedAccount);
                     holdingsWindow.Show();
                 }

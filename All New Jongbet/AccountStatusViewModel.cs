@@ -1,6 +1,8 @@
 ﻿using LiveCharts;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Windows;
+using System.Windows.Media;
 
 namespace All_New_Jongbet
 {
@@ -24,7 +26,12 @@ namespace All_New_Jongbet
         public double DailyProfitLoss
         {
             get => _dailyProfitLoss;
-            set { _dailyProfitLoss = value; OnPropertyChanged(); }
+            set
+            {
+                _dailyProfitLoss = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(DailyProfitLossColor));
+            }
         }
 
         private double _assetUsageRatio;
@@ -34,8 +41,24 @@ namespace All_New_Jongbet
             set { _assetUsageRatio = value; OnPropertyChanged(); }
         }
 
-        // [NEW] PieChart를 위한 SeriesCollection 속성 추가
         public SeriesCollection PieChartSeries { get; set; }
+
+        // [CHANGED] 수정된 색상 키 사용
+        public Brush DailyProfitLossColor
+        {
+            get
+            {
+                if (DailyProfitLoss > 0)
+                {
+                    return Application.Current.FindResource("PositiveRedBrush") as Brush;
+                }
+                if (DailyProfitLoss < 0)
+                {
+                    return Application.Current.FindResource("NegativeBlueBrush") as Brush;
+                }
+                return Application.Current.FindResource("PrimaryText") as Brush;
+            }
+        }
 
         public event PropertyChangedEventHandler PropertyChanged;
         protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)

@@ -136,7 +136,6 @@
       <DependentUpon>HoldingsWindow.xaml</DependentUpon>
     </Compile>
     <Compile Include="IndexConverter.cs" />
-    <Compile Include="KakaoApiService.cs" />
     <Compile Include="KiwoomApiService.cs" />
     <Compile Include="KiwoomRealtimeClient.cs" />
     <Compile Include="Logger.cs" />
@@ -146,13 +145,11 @@
     <Compile Include="Notification.cs" />
     <Compile Include="OrderHistoryItem.cs" />
     <Compile Include="OrderLogItem.cs" />
-    <Compile Include="OrderTypeToBrushConverter.cs" />
     <Compile Include="ProfitLossColorConverter.cs" />
     <Compile Include="SettingsPage.xaml.cs">
       <DependentUpon>SettingsPage.xaml</DependentUpon>
     </Compile>
     <Compile Include="StockData.cs" />
-    <Compile Include="StockItem.cs" />
     <Compile Include="StrategyInfo.cs" />
     <Compile Include="StrategyRepository.cs" />
     <Compile Include="StyleNameToStyleConverter.cs" />

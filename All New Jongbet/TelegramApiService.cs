@@ -3,6 +3,7 @@ using System.IO;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using All_New_Jongbet.Properties;
 using Newtonsoft.Json.Linq;
 
 namespace All_New_Jongbet
@@ -128,7 +129,6 @@ namespace All_New_Jongbet
                 var keyboard = new JObject
                 {
                     { "keyboard", new JArray(
-                        // [CHANGED] 버튼들을 하나의 배열로 묶어서 한 줄에 표시
                         new JArray("Daily Report", "Account Status", "Asset Trend"),
                         new JArray("Start", "Stop")
                       )
@@ -160,6 +160,23 @@ namespace All_New_Jongbet
                 Logger.Instance.Add($"텔레그램 메시지 전송 중 예외 발생: {ex.Message}");
                 return false;
             }
+        }
+
+        // [NEW] 거래 체결 알림 전용 메서드
+        public async Task<bool> SendTradeNotificationAsync(string message)
+        {
+            if (!Settings.Default.IsTelegramNotificationEnabled) return false;
+
+            string botToken = Settings.Default.TelegramBotToken;
+            string chatId = Settings.Default.TelegramChatId;
+
+            if (string.IsNullOrEmpty(botToken) || string.IsNullOrEmpty(chatId) || botToken == "BotToken" || chatId == "BotChatID")
+            {
+                Logger.Instance.Add("[텔레그램] 봇 토큰 또는 채팅 ID가 설정되지 않아 체결 알림을 보낼 수 없습니다.");
+                return false;
+            }
+
+            return await SendMessageAsync(botToken, chatId, message);
         }
 
         public async Task<bool> SendPhotoAsync(string botToken, string chatId, string imagePath, string caption = "")

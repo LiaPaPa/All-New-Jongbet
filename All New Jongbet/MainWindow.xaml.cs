@@ -191,27 +191,65 @@ namespace All_New_Jongbet
         private async Task SubscribeToRealtimeDataAsync()
         {
             Logger.Instance.Add("모든 계좌에 대한 실시간 데이터 구독을 시작합니다.");
-            int accountIndex = 0;
 
-            foreach (var account in AccountManageList.Where(acc => acc.TokenStatus == "Success"))
+            var accountsWithHoldings = AccountManageList
+                .Where(acc => acc.TokenStatus == "Success")
+                .ToList();
+
+            for (int i = 0; i < accountsWithHoldings.Count; i++)
             {
+                var account = accountsWithHoldings[i];
                 if (_realtimeClients.TryGetValue(account.AppKey, out var wsClient))
                 {
-                    await wsClient.RegisterRealtimeAsync($"{accountIndex:D2}01", new[] { "" }, new[] { "00" }); // 주문체결
-                    await wsClient.RegisterRealtimeAsync($"{accountIndex:D2}02", new[] { "" }, new[] { "04" }); // 잔고
+                    // [FIXED] 각 요청 사이에 딜레이를 추가하여 서버가 안정적으로 처리하도록 함
+                    await wsClient.RegisterRealtimeAsync($"{i:D2}01", new[] { "" }, new[] { "00" }); // 주문체결
+                    await Task.Delay(250);
+                    await wsClient.RegisterRealtimeAsync($"{i:D2}02", new[] { "" }, new[] { "04" }); // 잔고
+                    await Task.Delay(250);
 
                     if (account.HoldingStockList != null && account.HoldingStockList.Any())
                     {
-                        var stockCodes = account.HoldingStockList.Select(s => s.StockCode).ToArray();
-                        await wsClient.RegisterRealtimeAsync($"{accountIndex:D2}03", stockCodes, new[] { "0B" }); // 주식체결
-                        await wsClient.RegisterRealtimeAsync($"{accountIndex:D2}04", stockCodes, new[] { "0C" }); // 주식우선호가
+                        // [FIXED] 종목코드에서 'A'를 제거하고 요청
+                        var stockCodes = account.HoldingStockList.Select(s => s.StockCode.TrimStart('A')).ToArray();
+                        await wsClient.RegisterRealtimeAsync($"{i:D2}03", stockCodes, new[] { "0B" }); // 주식체결
+                        await Task.Delay(250);
+                        await wsClient.RegisterRealtimeAsync($"{i:D2}04", stockCodes, new[] { "0C" }); // 주식우선호가
+                        await Task.Delay(250);
                     }
                 }
                 else
                 {
                     Logger.Instance.Add($"[오류] {account.AccountNumber} 계좌의 AppKey에 해당하는 웹소켓 클라이언트를 찾을 수 없습니다.");
                 }
-                accountIndex++;
+            }
+        }
+
+        // [NEW] 특정 종목의 실시간 시세 구독을 해지(갱신)하는 메서드
+        private async Task UpdateStockSubscriptionAsync(AccountInfo account)
+        {
+            var accountIndex = AccountManageList.IndexOf(account);
+            if (accountIndex == -1) return;
+
+            if (_realtimeClients.TryGetValue(account.AppKey, out var wsClient))
+            {
+                // [FIXED] 종목코드에서 'A'를 제거하고 요청
+                var stockCodes = account.HoldingStockList?.Select(s => s.StockCode.TrimStart('A')).ToArray() ?? new string[0];
+
+                if (stockCodes.Any())
+                {
+                    Logger.Instance.Add($"[{account.AccountNumber}] 보유 종목 변경으로 실시간 시세를 재구독합니다. (대상: {stockCodes.Length}개)");
+                    await wsClient.RegisterRealtimeAsync($"{accountIndex:D2}03", stockCodes, new[] { "0B" }, "0"); // refresh: "0"으로 기존 구독 덮어쓰기
+                    await Task.Delay(250);
+                    await wsClient.RegisterRealtimeAsync($"{accountIndex:D2}04", stockCodes, new[] { "0C" }, "0"); // refresh: "0"으로 기존 구독 덮어쓰기
+                }
+                else
+                {
+                    // 보유 종목이 하나도 없으면 해당 그룹의 실시간 구독을 해지
+                    Logger.Instance.Add($"[{account.AccountNumber}] 보유 종목이 없어 실시간 시세 구독을 해지합니다.");
+                    await wsClient.UnregisterRealtimeAsync($"{accountIndex:D2}03");
+                    await Task.Delay(250);
+                    await wsClient.UnregisterRealtimeAsync($"{accountIndex:D2}04");
+                }
             }
         }
 
@@ -607,17 +645,24 @@ namespace All_New_Jongbet
                 JObject values = item["values"] as JObject;
                 if (values == null) continue;
 
-                string stockCode = values["9001"]?.ToString()?.TrimStart('A');
-                if (string.IsNullOrEmpty(stockCode))
+                // [FIXED] 실시간 데이터 종류에 따라 종목코드 파싱 위치를 다르게 함
+                string stockCode = string.Empty;
+                if (dataType == "0B" || dataType == "0C") // 주식체결, 우선호가
                 {
                     stockCode = item["item"]?.ToString()?.TrimStart('A');
                 }
+                else // 주문체결, 잔고 등
+                {
+                    stockCode = values["9001"]?.ToString()?.TrimStart('A');
+                }
+
+                if (string.IsNullOrEmpty(stockCode)) continue;
 
                 switch (dataType)
                 {
                     case "00": HandleOrderExecution(account, values); break;
                     case "04": HandleBalanceUpdate(account, values); break;
-                    case "0B": HandleStockExecution(values); break;
+                    case "0B": HandleStockExecution(stockCode, values); break;
                     case "0C": HandlePriorityQuote(stockCode, values); break;
                 }
             }
@@ -627,42 +672,61 @@ namespace All_New_Jongbet
         {
             if (string.IsNullOrEmpty(stockCode)) return;
 
-            double.TryParse(values["27"]?.ToString(), out double bestAskPrice);
-            double.TryParse(values["28"]?.ToString(), out double bestBidPrice);
+            // [FIXED] 수신된 값에서 부호를 제거하기 위해 Math.Abs 사용
+            double.TryParse(values["27"]?.ToString(), out double rawAskPrice);
+            double.TryParse(values["28"]?.ToString(), out double rawBidPrice);
+            double bestAskPrice = Math.Abs(rawAskPrice);
+            double bestBidPrice = Math.Abs(rawBidPrice);
 
             foreach (var account in AccountManageList)
             {
-                var stockToUpdate = account.HoldingStockList?.FirstOrDefault(s => s.StockCode == stockCode);
+                // [FIXED] 종목코드 비교 시 TrimStart('A')를 사용하여 'A' 접두사 문제를 해결
+                var stockToUpdate = account.HoldingStockList?.FirstOrDefault(s => s.StockCode.TrimStart('A') == stockCode);
                 if (stockToUpdate != null)
                 {
                     Dispatcher.Invoke(() =>
                     {
-                        stockToUpdate.BestAskPrice = Math.Abs(bestAskPrice);
-                        stockToUpdate.BestBidPrice = Math.Abs(bestBidPrice);
+                        stockToUpdate.BestAskPrice = bestAskPrice;
+                        stockToUpdate.BestBidPrice = bestBidPrice;
                     });
                 }
             }
         }
 
 
-        private void HandleStockExecution(JObject values)
+        private void HandleStockExecution(string stockCode, JObject values)
         {
             try
             {
-                string stockCode = values["9001"]?.ToString()?.TrimStart('A');
                 if (string.IsNullOrEmpty(stockCode)) return;
 
-                double.TryParse(values["10"]?.ToString(), out double currentPrice);
+                // [FIXED] 수신된 값에서 부호를 제거하기 위해 Math.Abs 사용
+                double.TryParse(values["10"]?.ToString(), out double rawCurrentPrice);
+                double currentPrice = Math.Abs(rawCurrentPrice);
+
                 double.TryParse(values["12"]?.ToString(), out double fluctuationRate);
                 long.TryParse(values["13"]?.ToString(), out long cumulativeVolume);
-                double.TryParse(values["17"]?.ToString(), out double highPrice);
-                double.TryParse(values["18"]?.ToString(), out double lowPrice);
+
+                double.TryParse(values["17"]?.ToString(), out double rawHighPrice);
+                double highPrice = Math.Abs(rawHighPrice);
+
+                double.TryParse(values["18"]?.ToString(), out double rawLowPrice);
+                double lowPrice = Math.Abs(rawLowPrice);
+
+                // [DEBUG LOG 1 & 2] 수신된 원본 데이터와 실제 처리될 값 로그
+                Logger.Instance.Add($"[DEBUG 1] Raw Data: code={stockCode}, price={rawCurrentPrice}");
+                Logger.Instance.Add($"[DEBUG 2] Parsed Data: code={stockCode}, price={currentPrice}");
 
                 foreach (var account in AccountManageList)
                 {
-                    var stockToUpdate = account.HoldingStockList?.FirstOrDefault(s => s.StockCode == stockCode);
+                    // [FIXED] 종목코드 비교 시 TrimStart('A')를 사용하여 'A' 접두사 문제를 해결
+                    var stockToUpdate = account.HoldingStockList?.FirstOrDefault(s => s.StockCode.TrimStart('A') == stockCode);
+
                     if (stockToUpdate != null)
                     {
+                        // [DEBUG LOG 3] 일치하는 종목을 찾았을 경우 로그
+                        Logger.Instance.Add($"[DEBUG 3] Found matching stock in {account.AccountNumber}: {stockToUpdate.StockName}. Applying update...");
+
                         Dispatcher.Invoke(() =>
                         {
                             stockToUpdate.CurrentPrice = currentPrice;
@@ -682,6 +746,11 @@ namespace All_New_Jongbet
                             }
 
                             account.RecalculateAndUpdateTotals();
+                            _dashboardPage.UpdateFullPeriodData(AccountManageList);
+
+                            // [DEBUG LOG 4] UI 업데이트 후 로그
+                            Logger.Instance.Add($"[DEBUG 4] UI updated for {stockToUpdate.StockName}. New P/L: {stockToUpdate.EvaluationProfitLoss:N0}");
+
                             _ = _tradingManager.CheckSellConditionsAsync(account, stockToUpdate);
                         });
                     }
@@ -719,7 +788,7 @@ namespace All_New_Jongbet
 
                 Logger.Instance.Add($"[실시간 주문처리] 계좌:{account.AccountNumber}, 주문번호:{orderNumber}, 상태:{orderStatusFromApi}, 미체결:{unfilledQuantity}");
 
-                Dispatcher.Invoke(() =>
+                Dispatcher.Invoke(async () => // 비동기 처리를 위해 async 추가
                 {
                     var existingOrder = OrderQueList.FirstOrDefault(o => o.OrderNumber == orderNumber);
 
@@ -767,10 +836,19 @@ namespace All_New_Jongbet
                             );
                         }
 
-                        var holdingStock = account.HoldingStockList.FirstOrDefault(s => s.StockCode == stockCode);
+                        var holdingStock = account.HoldingStockList.FirstOrDefault(s => s.StockCode.TrimStart('A') == stockCode);
 
                         if (orderTypeCode.Contains("매수"))
                         {
+                            // [NEW] 텔레그램 매수 체결 알림
+                            double buyAmount = executedPrice * executedQuantity;
+                            string message = $"[매수 체결] 📈\n\n" +
+                                             $"- 계좌: {account.AccountNumber}\n" +
+                                             $"- 종목: {stockName}\n" +
+                                             $"- 체결가: {executedPrice:N0}원\n" +
+                                             $"- 체결금액: {buyAmount:N0}원";
+                            await _telegramService.SendTradeNotificationAsync(message);
+
                             if (holdingStock == null)
                             {
                                 holdingStock = new HoldingStock
@@ -783,6 +861,7 @@ namespace All_New_Jongbet
                                     PurchaseAmount = executedPrice * executedQuantity
                                 };
                                 account.HoldingStockList.Add(holdingStock);
+                                await UpdateStockSubscriptionAsync(account); // 신규 편입 종목 실시간 구독
                             }
                             else
                             {
@@ -798,14 +877,24 @@ namespace All_New_Jongbet
                         {
                             if (holdingStock != null)
                             {
+                                // [NEW] 텔레그램 매도 체결 알림
+                                double profitRate = (holdingStock.PurchasePrice > 0) ? (executedPrice / holdingStock.PurchasePrice - 1) * 100 : 0;
+                                string message = $"[매도 체결] 📉\n\n" +
+                                                 $"- 계좌: {account.AccountNumber}\n" +
+                                                 $"- 종목: {stockName}\n" +
+                                                 $"- 수익률: {profitRate:F2}%";
+                                await _telegramService.SendTradeNotificationAsync(message);
+
                                 holdingStock.HoldingQuantity -= executedQuantity;
                                 if (holdingStock.HoldingQuantity <= 0)
                                 {
                                     account.HoldingStockList.Remove(holdingStock);
+                                    await UpdateStockSubscriptionAsync(account); // 전량 매도 종목 실시간 구독 해지
                                 }
                             }
                         }
                         account.RecalculateAndUpdateTotals();
+                        _dashboardPage.UpdateFullPeriodData(AccountManageList);
                     }
 
                     if (unfilledQuantity == 0)
@@ -813,7 +902,7 @@ namespace All_New_Jongbet
                         var orderToRemove = OrderQueList.FirstOrDefault(o => o.OrderNumber == orderNumber);
                         if (orderToRemove != null)
                         {
-                            OrderQueList.Remove(orderToRemove);
+                            // OrderQueList.Remove(orderToRemove); // 체결 완료되어도 목록에서 바로 지우지 않고 상태만 변경되도록 유지
                         }
                     }
                 });

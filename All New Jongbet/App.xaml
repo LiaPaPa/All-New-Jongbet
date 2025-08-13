@@ -11,9 +11,10 @@
         <SolidColorBrush x:Key="SecondaryText" Color="#a0a0a0"/>
         <SolidColorBrush x:Key="BorderColor" Color="#373737"/>
         <SolidColorBrush x:Key="AccentPurple" Color="#5e72e4"/>
-        <SolidColorBrush x:Key="AccentBlue" Color="#007ACC"/>
-        <SolidColorBrush x:Key="PositiveGreen" Color="#2dce89"/>
-        <SolidColorBrush x:Key="NegativeRed" Color="#f5365c"/>
+
+        <!-- [CHANGED] 눈이 편안한 색상으로 변경 및 키 이름 수정 -->
+        <SolidColorBrush x:Key="PositiveRedBrush" Color="#E57373"/>
+        <SolidColorBrush x:Key="NegativeBlueBrush" Color="#64B5F6"/>
 
         <Style TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource PrimaryText}"/>
@@ -57,7 +58,7 @@
             </Setter>
             <Style.Triggers>
                 <Trigger Property="IsHighlighted" Value="True">
-                    <Setter Property="Background" Value="{StaticResource AccentBlue}"/>
+                    <Setter Property="Background" Value="{StaticResource NegativeBlueBrush}"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -323,10 +324,10 @@
             <Setter Property="Foreground" Value="{StaticResource PrimaryText}"/>
         </Style>
         <Style x:Key="CardValuePositive" TargetType="TextBlock" BasedOn="{StaticResource CardValue}">
-            <Setter Property="Foreground" Value="{StaticResource PositiveGreen}"/>
+            <Setter Property="Foreground" Value="{StaticResource PositiveRedBrush}"/>
         </Style>
         <Style x:Key="CardValueNegative" TargetType="TextBlock" BasedOn="{StaticResource CardValue}">
-            <Setter Property="Foreground" Value="{StaticResource NegativeRed}"/>
+            <Setter Property="Foreground" Value="{StaticResource NegativeBlueBrush}"/>
         </Style>
 
         <Style x:Key="RoundedRectLabelStyle" TargetType="Label">
@@ -512,7 +513,7 @@
                     <Setter Property="Background" Value="#3e3e42"/>
                 </Trigger>
                 <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background" Value="{StaticResource AccentBlue}"/>
+                    <Setter Property="Background" Value="{StaticResource NegativeBlueBrush}"/>
                     <Setter Property="Foreground" Value="White"/>
                 </Trigger>
             </Style.Triggers>
@@ -533,7 +534,7 @@
         <Style x:Key="StatusCellStyle" TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
             <Style.Triggers>
                 <DataTrigger Binding="{Binding Status}" Value="Active">
-                    <Setter Property="Foreground" Value="{StaticResource PositiveGreen}"/>
+                    <Setter Property="Foreground" Value="{StaticResource PositiveRedBrush}"/>
                     <Setter Property="FontWeight" Value="SemiBold"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Status}" Value="Inactive">
@@ -548,6 +549,8 @@
         </Style>
 
         <local:ProfitLossColorConverter x:Key="ProfitLossColorConv"/>
+        <!-- NEW: Dashboard의 Today's Orders 카드 스타일을 위해 컨버터 추가 -->
+        <local:ResourceKeyToBrushConverter x:Key="ResourceKeyToBrushConverter"/>
 
         <local:IndexConverter x:Key="IndexConverter"/>
 
@@ -600,12 +603,12 @@
         <Style x:Key="WindowCloseButton" TargetType="Button" BasedOn="{StaticResource WindowControlButton}">
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="{StaticResource NegativeRed}"/>
+                    <Setter Property="Background" Value="{StaticResource PositiveRedBrush}"/>
                     <Setter Property="Foreground" Value="White"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
-        
+
         <Style x:Key="PlainButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -618,6 +621,6 @@
                 </Setter.Value>
             </Setter>
         </Style>
-        
+
     </Application.Resources>
 </Application>

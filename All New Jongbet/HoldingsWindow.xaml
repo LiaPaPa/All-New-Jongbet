@@ -29,10 +29,11 @@
             </Border>
 
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                <ItemsControl ItemsSource="{Binding Holdings}" AlternationCount="{x:Static sys:Int32.MaxValue}">
+                <!-- [CHANGED] ItemsSource를 AccountInfo의 HoldingStockList에 직접 바인딩 -->
+                <ItemsControl ItemsSource="{Binding HoldingStockList}" AlternationCount="{x:Static sys:Int32.MaxValue}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Style="{StaticResource KPICard}" Margin="15,10" Padding="20">
+                            <Border Style="{StaticResource KPICard}" Margin="15,4" Padding="12">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
@@ -65,3 +66,4 @@
         </Grid>
     </Border>
 </Window>
+
