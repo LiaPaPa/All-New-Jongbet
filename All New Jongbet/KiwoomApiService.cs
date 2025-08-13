@@ -243,43 +243,8 @@ namespace All_New_Jongbet
             return response.IsSuccess;
         }
 
-        public async Task<List<SearchedStock>> GetConditionSearchResultAsync(AccountInfo account, string conditionName, string conditionIndex)
-        {
-            Logger.Instance.Add($"[TR 요청] 조건검색 결과 요청 (ka10172) - 조건: {conditionName}");
-            using (var ws = new ClientWebSocket())
-            {
-                try
-                {
-                    ws.Options.SetRequestHeader("authorization", $"Bearer {account.Token}");
-                    await ws.ConnectAsync(new Uri(WebSocketUrl), CancellationToken.None);
-                    var loginPacket = new { trnm = "LOGIN", token = account.Token };
-                    await SendWsMessageAsync(ws, loginPacket);
-                    await ReceiveWsMessageAsync(ws);
-                    var requestPacket = new { trnm = "CNSSTK", cnsr_name = conditionName, cnsr_idx = conditionIndex };
-                    await SendWsMessageAsync(ws, requestPacket);
-                    var response = await ReceiveWsMessageAsync(ws);
-                    if (response["return_code"]?.ToString() == "0")
-                    {
-                        var stocks = new List<SearchedStock>();
-                        JArray dataArray = (JArray)response["data"];
-                        foreach (var item in dataArray)
-                        {
-                            stocks.Add(new SearchedStock(item[0].ToString(), item[1].ToString()));
-                        }
-                        return stocks;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Logger.Instance.Add($"[WebSocket 오류] 조건검색 결과 요청 중 오류: {ex.Message}");
-                }
-                finally
-                {
-                    if (ws.State == WebSocketState.Open) await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
-                }
-            }
-            return new List<DailyChartData>();
-        }
+        // [REMOVED] 불필요한 WebSocket 생성 로직 제거, TradingManager로 책임 이동
+        // public async Task<List<SearchedStock>> GetConditionSearchResultAsync(...) { ... }
 
         private async Task<(bool IsSuccess, JObject JsonData, string ContYn, string NextKey)> SendHttpRequestAsync(AccountInfo account, string apiId, string endpoint, object requestBody, string contYn = "N", string nextKey = "")
         {
@@ -368,6 +333,17 @@ namespace All_New_Jongbet
                 Logger.Instance.Add($"[주문 오류] {apiId} 요청 중 예외 발생: {ex.Message}");
             }
             return (false, null);
+        }
+
+        public async Task<List<DailyChartData>> GetDailyChartAsync(AccountInfo account, string stockCode, string startDate)
+        {
+            var requestBody = new { sch_gb = "D", st_dt = startDate, ed_dt = DateTime.Today.ToString("yyyyMMdd"), stk_cd = stockCode };
+            var response = await SendHttpRequestAsync(account, "ka10081", "/api/dostk/chart", requestBody);
+            if (response.IsSuccess && response.JsonData?["chart_data"] is JArray chartArray)
+            {
+                return chartArray.ToObject<List<DailyChartData>>();
+            }
+            return null;
         }
     }
 }

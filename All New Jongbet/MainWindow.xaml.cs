@@ -18,11 +18,11 @@ using System.Windows.Input;
 using All_New_Jongbet.Properties;
 using System.Text;
 using System.Drawing;
+
 namespace All_New_Jongbet
 {
     public partial class MainWindow : Window, INotifyPropertyChanged
     {
-        // CHANGED: API 호출 간격을 210ms로 조정하여 속도 향상 (초당 5회 제한 준수)
         public static int ApiRequestDelay = 210;
         public ObservableCollection<AccountInfo> AccountManageList { get; set; }
         public ObservableCollection<StrategyInfo> StrategyList { get; set; }
@@ -63,8 +63,7 @@ namespace All_New_Jongbet
 
         private Timer _notificationTimer;
         private bool _isNotificationSentToday = false;
-        private readonly TelegramApiService _telegramService; // Telegram 서비스 객체 추가
-
+        private readonly TelegramApiService _telegramService;
         private readonly ChartGenerator _chartGenerator;
 
         public MainWindow()
@@ -72,7 +71,7 @@ namespace All_New_Jongbet
             InitializeComponent();
             this.DataContext = this;
 
-            _telegramService = new TelegramApiService(); // 생성자에서 초기화
+            _telegramService = new TelegramApiService();
             _telegramService.OnMessageReceived += HandleTelegramMessage;
             _chartGenerator = new ChartGenerator();
 
@@ -96,7 +95,6 @@ namespace All_New_Jongbet
             _logsPage = new LogsPage(OrderLogList);
             _settingsPage = new SettingsPage();
 
-
             this.Loaded += async (s, e) =>
             {
                 Logger.Instance.Add("메인 윈도우 로딩 완료.");
@@ -105,18 +103,11 @@ namespace All_New_Jongbet
                 await LoadApiKeysAndRequestTokensAsync();
                 await ConnectAllWebsocketsAsync();
 
-                var primaryAppKey = _realtimeClients.Keys.FirstOrDefault();
                 var activeAccounts = AccountManageList.Where(acc => acc.TokenStatus == "Success").ToList();
                 _apiRequestScheduler = new ApiRequestScheduler(activeAccounts);
 
-                if (primaryAppKey != null)
-                {
-                    var primaryWs = GetWebSocketByAppKey(primaryAppKey);
-                    if (primaryWs != null)
-                    {
-                        _tradingManager = new TradingManager(_apiService, StrategyList, AccountManageList, _apiRequestScheduler, primaryWs, _wsResponseTasks);
-                    }
-                }
+                // [MODIFIED] TradingManager 생성 시 this (MainWindow 인스턴스) 전달
+                _tradingManager = new TradingManager(this, _apiService, StrategyList, AccountManageList, _apiRequestScheduler, SendWsRequestAsync);
 
                 await FetchAllConditionListsAsync();
                 await FetchAllAccountBalancesAsync();
@@ -141,7 +132,6 @@ namespace All_New_Jongbet
                 DashboardButton.IsChecked = true;
 
                 SetupNotificationTimer();
-
                 await InitializeTelegramBot();
             };
 
@@ -151,21 +141,6 @@ namespace All_New_Jongbet
         private async Task ConnectAllWebsocketsAsync()
         {
             Logger.Instance.Add("AppKey별 웹소켓 연결을 시작합니다.");
-            int accountIndex = 0;
-
-            foreach (var account in AccountManageList.Where(acc => acc.TokenStatus == "Success"))
-            {
-                if (_realtimeClients.ContainsKey(account.AppKey))
-                {
-                    Logger.Instance.Add($"{account.AccountNumber} 계좌의 AppKey에 대한 웹소켓은 이미 연결되어 있습니다.");
-                    continue;
-                }
-
-        private async Task ConnectAllWebsocketsAsync()
-        {
-            Logger.Instance.Add("AppKey별 웹소켓 연결을 시작합니다.");
-            int accountIndex = 0;
-
             foreach (var account in AccountManageList.Where(acc => acc.TokenStatus == "Success"))
             {
                 if (_realtimeClients.ContainsKey(account.AppKey))
@@ -197,17 +172,13 @@ namespace All_New_Jongbet
                     _realtimeClients[account.AppKey] = wsClient;
                     Logger.Instance.Add($"AppKey {account.AppKey.Substring(0, 8)}... 에 대한 웹소켓 연결 성공.");
                 }
-                accountIndex++;
             }
         }
 
         private async Task SubscribeToRealtimeDataAsync()
         {
             Logger.Instance.Add("모든 계좌에 대한 실시간 데이터 구독을 시작합니다.");
-
-            var accountsWithHoldings = AccountManageList
-                .Where(acc => acc.TokenStatus == "Success")
-                .ToList();
+            var accountsWithHoldings = AccountManageList.Where(acc => acc.TokenStatus == "Success").ToList();
 
             for (int i = 0; i < accountsWithHoldings.Count; i++)
             {
@@ -219,23 +190,12 @@ namespace All_New_Jongbet
                     await wsClient.RegisterRealtimeAsync($"{i:D2}02", new[] { "" }, new[] { "04" }); // 잔고
                     await Task.Delay(250);
 
-                    if (account.HoldingStockList != null && account.HoldingStockList.Any())
-                    {
-                        var stockCodes = account.HoldingStockList.Select(s => s.StockCode.TrimStart('A')).ToArray();
-                        await wsClient.RegisterRealtimeAsync($"{i:D2}03", stockCodes, new[] { "0B" }); // 주식체결
-                        await Task.Delay(250);
-                        await wsClient.RegisterRealtimeAsync($"{i:D2}04", stockCodes, new[] { "0C" }); // 주식우선호가
-                        await Task.Delay(250);
-                    }
-                }
-                else
-                {
-                    Logger.Instance.Add($"[오류] {account.AccountNumber} 계좌의 AppKey에 해당하는 웹소켓 클라이언트를 찾을 수 없습니다.");
+                    await UpdateStockSubscriptionAsync(account); // 보유 종목 구독
                 }
             }
         }
 
-        private async Task UpdateStockSubscriptionAsync(AccountInfo account)
+        public async Task UpdateStockSubscriptionAsync(AccountInfo account)
         {
             var accountIndex = AccountManageList.IndexOf(account);
             if (accountIndex == -1) return;
@@ -261,8 +221,8 @@ namespace All_New_Jongbet
             }
         }
 
-
-        private ClientWebSocket GetWebSocketByAppKey(string appKey)
+        // [MODIFIED] private -> public으로 변경
+        public ClientWebSocket GetWebSocketByAppKey(string appKey)
         {
             if (_realtimeClients.TryGetValue(appKey, out var client))
             {
@@ -298,16 +258,13 @@ namespace All_New_Jongbet
         {
             var clickedButton = sender as ToggleButton;
             if (clickedButton == null) return;
-
             var allToggleButtons = new[] { DashboardButton, TradeSetupButton, StrategySetupButton, LogsButton };
             foreach (var button in allToggleButtons)
             {
                 if (button != clickedButton) button.IsChecked = false;
             }
             clickedButton.IsChecked = true;
-
             IsSetupMenuActive = TradeSetupButton.IsChecked == true || StrategySetupButton.IsChecked == true;
-
             NavigateToPage(clickedButton.Name);
         }
 
@@ -315,15 +272,12 @@ namespace All_New_Jongbet
         {
             var clickedButton = sender as Button;
             if (clickedButton == null) return;
-
             var allToggleButtons = new[] { DashboardButton, TradeSetupButton, StrategySetupButton, LogsButton };
             foreach (var button in allToggleButtons)
             {
                 button.IsChecked = false;
             }
-
             IsSetupMenuActive = false;
-
             NavigateToPage(clickedButton.Name);
         }
 
@@ -350,13 +304,6 @@ namespace All_New_Jongbet
                 _statusNotification.Message = message;
                 _statusNotification.StyleKey = styleKey;
             });
-        }
-
-        public void AddOrderNotification(string type, string stockName, int quantity)
-        {
-            var styleKey = type.ToUpper() == "BUY" ? "BuyLabel" : "SellLabel";
-            var message = $"{type.ToUpper()}: {stockName} {quantity} shares";
-            _orderNotificationQueue.Enqueue(new Notification { Message = message, StyleKey = styleKey });
         }
 
         private async Task ProcessNotificationQueueAsync()
@@ -467,14 +414,10 @@ namespace All_New_Jongbet
                     }
                     await Task.Delay(300);
                 }
-                else
-                {
-                    Logger.Instance.Add($"[오류] {account.AccountNumber} 계좌에 해당하는 웹소켓 클라이언트를 찾을 수 없습니다.");
-                }
             }
         }
 
-        private async Task<JObject> SendWsRequestAsync(ClientWebSocket ws, string trnm, object requestPacket)
+        public async Task<JObject> SendWsRequestAsync(ClientWebSocket ws, string trnm, object requestPacket)
         {
             var tcs = new TaskCompletionSource<JObject>();
             _wsResponseTasks.TryAdd(trnm, tcs);
@@ -546,24 +489,16 @@ namespace All_New_Jongbet
 
         public async Task FetchAllOrderHistoriesAsync()
         {
-            var strategyAccountNumbers = StrategyList
-                .Select(s => s.AccountNumber)
-                .Distinct()
-                .ToList();
-
+            var strategyAccountNumbers = StrategyList.Select(s => s.AccountNumber).Distinct().ToList();
             if (!strategyAccountNumbers.Any())
             {
                 Logger.Instance.Add("조회할 전략이 등록된 계좌가 없어 주문/체결 내역 조회를 건너뜁니다.");
                 return;
             }
-
             Logger.Instance.Add($"전략에 등록된 계좌({string.Join(", ", strategyAccountNumbers)})의 주문/체결/미체결 내역 조회를 시작합니다.");
-
             AllOrderHistoryList.Clear();
             OrderQueList.Clear();
-
-            var accountsToQuery = AccountManageList
-                .Where(acc => acc.TokenStatus == "Success" && strategyAccountNumbers.Contains(acc.AccountNumber));
+            var accountsToQuery = AccountManageList.Where(acc => acc.TokenStatus == "Success" && strategyAccountNumbers.Contains(acc.AccountNumber));
 
             foreach (var account in accountsToQuery)
             {
@@ -574,9 +509,7 @@ namespace All_New_Jongbet
                     order.AccountNumber = account.AccountNumber;
                     AllOrderHistoryList.Add(order);
                 }
-
                 await Task.Delay(ApiRequestDelay);
-
                 UpdateStatus($"Fetching Unfilled Orders for {account.AccountNumber}...", "RequestingStatusLabel");
                 var unfilledHistory = await _apiService.GetUnfilledOrdersAsync(account);
                 foreach (var order in unfilledHistory)
@@ -587,16 +520,13 @@ namespace All_New_Jongbet
                         AllOrderHistoryList.Add(order);
                     }
                 }
-
                 await Task.Delay(ApiRequestDelay);
             }
-
             foreach (var order in AllOrderHistoryList.OrderBy(o => o.OrderTime))
             {
                 order.OrderStatusDisplay = ConvertApiStatusToDisplayStatus(order);
                 OrderQueList.Insert(0, order);
             }
-
             Logger.Instance.Add($"총 {OrderQueList.Count}건의 주문 내역을 로드했습니다.");
         }
 
@@ -612,58 +542,39 @@ namespace All_New_Jongbet
                 }
                 if (order.OrderStatusFromApi.Contains("접수")) return "체결대기";
             }
-
-            if (order.ExecutedQuantity == 0 && order.UnfilledQuantity > 0)
-            {
-                return "체결대기";
-            }
-            else if (order.UnfilledQuantity > 0)
-            {
-                return "체결중";
-            }
-            else if (order.UnfilledQuantity == 0 && order.ExecutedQuantity > 0 && order.ExecutedQuantity == order.OrderQuantity)
-            {
-                return "체결완료";
-            }
-
-            if (order.UnfilledQuantity > 0 && order.ExecutedQuantity == 0)
-            {
-                return "체결대기";
-            }
-
+            if (order.ExecutedQuantity == 0 && order.UnfilledQuantity > 0) return "체결대기";
+            else if (order.UnfilledQuantity > 0) return "체결중";
+            else if (order.UnfilledQuantity == 0 && order.ExecutedQuantity > 0 && order.ExecutedQuantity == order.OrderQuantity) return "체결완료";
+            if (order.UnfilledQuantity > 0 && order.ExecutedQuantity == 0) return "체결대기";
             return "확인필요";
         }
 
+        // [MODIFIED] 실시간 데이터 처리 로직 개선
         private void HandleRealtimeData(AccountInfo account, JObject data)
         {
-            JArray dataArray = data["data"] as JArray;
-            if (dataArray == null) return;
-
-            foreach (JObject item in dataArray)
+            string type = data["type"]?.ToString();
+            if (!string.IsNullOrEmpty(type)) // 주식체결(0B), 주식우선호가(0C)
             {
-                string dataType = item["type"]?.ToString();
-                JObject values = item["values"] as JObject;
-                if (values == null) continue;
-
-                string stockCode = string.Empty;
-                if (dataType == "0B" || dataType == "0C")
+                string stockCode = data["stk_cd"]?.ToString()?.TrimStart('A');
+                if (data["data"] is JObject values)
                 {
-                    HandleStockExecution(values);
-                    continue;
+                    if (type == "0B") HandleStockExecution(stockCode, values);
+                    if (type == "0C") HandlePriorityQuote(stockCode, values);
                 }
-                else
+            }
+            else if (data["data"] is JArray dataArray) // 주문체결(00), 잔고(04)
+            {
+                foreach (JObject item in dataArray)
                 {
-                    stockCode = values["9001"]?.ToString()?.TrimStart('A');
-                }
-
-                if (string.IsNullOrEmpty(stockCode)) continue;
-
-                switch (dataType)
-                {
-                    case "00": HandleOrderExecution(account, values); break;
-                    case "04": HandleBalanceUpdate(account, values); break;
-                    case "0B": HandleStockExecution(stockCode, values); break;
-                    case "0C": HandlePriorityQuote(stockCode, values); break;
+                    string dataType = item["type"]?.ToString();
+                    if (item["values"] is JObject values)
+                    {
+                        switch (dataType)
+                        {
+                            case "00": HandleOrderExecution(account, values); break;
+                            case "04": HandleBalanceUpdate(account, values); break;
+                        }
+                    }
                 }
             }
         }
@@ -671,75 +582,60 @@ namespace All_New_Jongbet
         private void HandlePriorityQuote(string stockCode, JObject values)
         {
             if (string.IsNullOrEmpty(stockCode)) return;
-
             double.TryParse(values["27"]?.ToString(), out double rawAskPrice);
             double.TryParse(values["28"]?.ToString(), out double rawBidPrice);
             double bestAskPrice = Math.Abs(rawAskPrice);
             double bestBidPrice = Math.Abs(rawBidPrice);
-
-            foreach (var account in AccountManageList)
+            var accountsHoldingStock = AccountManageList.Where(acc => acc.HoldingStockList?.Any(s => s.StockCode.TrimStart('A') == stockCode) ?? false);
+            foreach (var account in accountsHoldingStock)
             {
-                var stockToUpdate = account.HoldingStockList?.FirstOrDefault(s => s.StockCode.TrimStart('A') == stockCode);
-                if (stockToUpdate != null)
+                var stockToUpdate = account.HoldingStockList.First(s => s.StockCode.TrimStart('A') == stockCode);
+                Dispatcher.Invoke(() =>
                 {
-                    Dispatcher.Invoke(() =>
-                    {
-                        stockToUpdate.BestAskPrice = bestAskPrice;
-                        stockToUpdate.BestBidPrice = bestBidPrice;
-                    });
-                }
+                    stockToUpdate.BestAskPrice = bestAskPrice;
+                    stockToUpdate.BestBidPrice = bestBidPrice;
+                });
             }
         }
-
 
         private void HandleStockExecution(string stockCode, JObject values)
         {
             try
             {
                 if (string.IsNullOrEmpty(stockCode)) return;
-
                 double.TryParse(values["10"]?.ToString(), out double rawCurrentPrice);
                 double currentPrice = Math.Abs(rawCurrentPrice);
-
                 double.TryParse(values["12"]?.ToString(), out double fluctuationRate);
                 long.TryParse(values["13"]?.ToString(), out long cumulativeVolume);
-
                 double.TryParse(values["17"]?.ToString(), out double rawHighPrice);
                 double highPrice = Math.Abs(rawHighPrice);
-
                 double.TryParse(values["18"]?.ToString(), out double rawLowPrice);
                 double lowPrice = Math.Abs(rawLowPrice);
+                var accountsHoldingStock = AccountManageList.Where(acc => acc.HoldingStockList?.Any(s => s.StockCode.TrimStart('A') == stockCode) ?? false);
 
-                foreach (var account in AccountManageList)
+                foreach (var account in accountsHoldingStock)
                 {
-                    var stockToUpdate = account.HoldingStockList?.FirstOrDefault(s => s.StockCode.TrimStart('A') == stockCode);
-
-                    if (stockToUpdate != null)
+                    var stockToUpdate = account.HoldingStockList.First(s => s.StockCode.TrimStart('A') == stockCode);
+                    Dispatcher.Invoke(() =>
                     {
-                        Dispatcher.Invoke(() =>
+                        stockToUpdate.CurrentPrice = currentPrice;
+                        stockToUpdate.FluctuationRate = fluctuationRate;
+                        stockToUpdate.CumulativeVolume = cumulativeVolume;
+                        stockToUpdate.HighPrice = highPrice;
+                        stockToUpdate.LowPrice = lowPrice;
+                        if (stockToUpdate.HoldingQuantity > 0)
                         {
-                            stockToUpdate.CurrentPrice = currentPrice;
-                            stockToUpdate.FluctuationRate = fluctuationRate;
-                            stockToUpdate.CumulativeVolume = cumulativeVolume;
-                            stockToUpdate.HighPrice = highPrice;
-                            stockToUpdate.LowPrice = lowPrice;
-
-                            if (stockToUpdate.HoldingQuantity > 0)
+                            stockToUpdate.EvaluationAmount = currentPrice * stockToUpdate.HoldingQuantity;
+                            stockToUpdate.EvaluationProfitLoss = stockToUpdate.EvaluationAmount - stockToUpdate.PurchaseAmount;
+                            if (stockToUpdate.PurchaseAmount > 0)
                             {
-                                stockToUpdate.EvaluationAmount = currentPrice * stockToUpdate.HoldingQuantity;
-                                stockToUpdate.EvaluationProfitLoss = stockToUpdate.EvaluationAmount - stockToUpdate.PurchaseAmount;
-                                if (stockToUpdate.PurchaseAmount > 0)
-                                {
-                                    stockToUpdate.ProfitRate = (stockToUpdate.EvaluationProfitLoss / stockToUpdate.PurchaseAmount) * 100;
-                                }
+                                stockToUpdate.ProfitRate = (stockToUpdate.EvaluationProfitLoss / stockToUpdate.PurchaseAmount) * 100;
                             }
-
-                            account.RecalculateAndUpdateTotals();
-                            _dashboardPage.UpdateRealtimeUIData(AccountManageList);
-
-                            _ = _tradingManager.CheckSellConditionsAsync(account, stockToUpdate);
-                        });
-                    }
+                        }
+                        account.RecalculateAndUpdateTotals();
+                        _dashboardPage.UpdateRealtimeUIData(AccountManageList);
+                        _ = _tradingManager.CheckSellConditionsAsync(account, stockToUpdate);
+                    });
                 }
             }
             catch (Exception ex)
@@ -761,6 +657,8 @@ namespace All_New_Jongbet
                 int.TryParse(values["900"]?.ToString(), out int orderQuantity);
                 int.TryParse(values["902"]?.ToString(), out int unfilledQuantity);
                 double.TryParse(values["901"]?.ToString(), out double orderPrice);
+                int.TryParse(values["903"]?.ToString(), out int executedQuantity);
+                double.TryParse(values["904"]?.ToString(), out double executedPrice);
                 string orderTypeCode = values["905"]?.ToString();
                 string timeHHMMSS = values["908"]?.ToString();
                 string formattedTime = timeHHMMSS;
@@ -769,12 +667,11 @@ namespace All_New_Jongbet
                     formattedTime = $"{timeHHMMSS.Substring(0, 2)}:{timeHHMMSS.Substring(2, 2)}:{timeHHMMSS.Substring(4, 2)}";
                 }
 
-                Logger.Instance.Add($"[실시간 주문처리] 계좌:{account.AccountNumber}, 주문번호:{orderNumber}, 상태:{orderStatusFromApi}, 미체결:{unfilledQuantity}");
+                Logger.Instance.Add($"[실시간 주문처리] 계좌:{account.AccountNumber}, 주문번호:{orderNumber}, 상태:{orderStatusFromApi}, 체결수량:{executedQuantity}, 미체결:{unfilledQuantity}");
 
-                Dispatcher.Invoke(async () => // 비동기 처리를 위해 async 추가
+                Dispatcher.Invoke(async () =>
                 {
                     var existingOrder = OrderQueList.FirstOrDefault(o => o.OrderNumber == orderNumber);
-
                     if (existingOrder != null)
                     {
                         existingOrder.UnfilledQuantity = unfilledQuantity;
@@ -794,7 +691,7 @@ namespace All_New_Jongbet
                             StockName = stockName,
                             OrderQuantity = orderQuantity,
                             OrderPrice = orderPrice,
-                            ExecutedQuantity = orderQuantity - unfilledQuantity,
+                            ExecutedQuantity = executedQuantity,
                             UnfilledQuantity = unfilledQuantity,
                             OrderStatusFromApi = orderStatusFromApi,
                             OrderTypeCode = orderTypeCode,
@@ -806,37 +703,17 @@ namespace All_New_Jongbet
 
                     if (executedQuantity > 0)
                     {
-                        bool isStrategyAccount = StrategyList.Any(s => s.AccountNumber == account.AccountNumber);
-                        if (isStrategyAccount)
-                        {
-                            TransactionRepository.AddOrUpdateTransaction(
-                                account.AccountNumber,
-                                stockCode,
-                                stockName,
-                                orderTypeCode,
-                                executedQuantity,
-                                executedPrice,
-                                formattedTime
-                            );
-                        }
-
                         var holdingStock = account.HoldingStockList.FirstOrDefault(s => s.StockCode.TrimStart('A') == stockCode);
-
                         if (orderTypeCode.Contains("매수"))
                         {
                             double buyAmount = executedPrice * executedQuantity;
-                            string message = $"[매수 체결] 📈\n\n" +
-                                             $"- 계좌: {account.AccountNumber}\n" +
-                                             $"- 종목: {stockName}\n" +
-                                             $"- 체결가: {executedPrice:N0}원\n" +
-                                             $"- 체결금액: {buyAmount:N0}원";
+                            string message = $"[매수 체결] 📈\n\n- 계좌: {account.AccountNumber}\n- 종목: {stockName}\n- 체결가: {executedPrice:N0}원\n- 체결금액: {buyAmount:N0}원";
                             await _telegramService.SendTradeNotificationAsync(message);
-
                             if (holdingStock == null)
                             {
                                 holdingStock = new HoldingStock
                                 {
-                                    StockCode = stockCode,
+                                    StockCode = "A" + stockCode,
                                     StockName = stockName,
                                     HoldingQuantity = executedQuantity,
                                     TradableQuantity = executedQuantity,
@@ -844,7 +721,7 @@ namespace All_New_Jongbet
                                     PurchaseAmount = executedPrice * executedQuantity
                                 };
                                 account.HoldingStockList.Add(holdingStock);
-                                await UpdateStockSubscriptionAsync(account); // 신규 편입 종목 실시간 구독
+                                await UpdateStockSubscriptionAsync(account);
                             }
                             else
                             {
@@ -861,31 +738,17 @@ namespace All_New_Jongbet
                             if (holdingStock != null)
                             {
                                 double profitRate = (holdingStock.PurchasePrice > 0) ? (executedPrice / holdingStock.PurchasePrice - 1) * 100 : 0;
-                                string message = $"[매도 체결] 📉\n\n" +
-                                                 $"- 계좌: {account.AccountNumber}\n" +
-                                                 $"- 종목: {stockName}\n" +
-                                                 $"- 수익률: {profitRate:F2}%";
+                                string message = $"[매도 체결] 📉\n\n- 계좌: {account.AccountNumber}\n- 종목: {stockName}\n- 수익률: {profitRate:F2}%";
                                 await _telegramService.SendTradeNotificationAsync(message);
-
                                 holdingStock.HoldingQuantity -= executedQuantity;
                                 if (holdingStock.HoldingQuantity <= 0)
                                 {
                                     account.HoldingStockList.Remove(holdingStock);
-                                    await UpdateStockSubscriptionAsync(account); // 전량 매도 종목 실시간 구독 해지
+                                    await UpdateStockSubscriptionAsync(account);
                                 }
                             }
                         }
-                        account.RecalculateAndUpdateTotals();
-                        _dashboardPage.UpdateFullPeriodData(AccountManageList);
-                    }
-
-                    if (unfilledQuantity == 0)
-                    {
-                        var orderToRemove = OrderQueList.FirstOrDefault(o => o.OrderNumber == orderNumber);
-                        if (orderToRemove != null)
-                        {
-                            // OrderQueList.Remove(orderToRemove); 
-                        }
+                        _apiRequestScheduler.EnqueueRequest(async (acc) => { await _apiService.GetAccountBalanceAsync(acc); });
                     }
                 });
             }
@@ -901,9 +764,7 @@ namespace All_New_Jongbet
             {
                 string stockCode = values["9001"]?.ToString();
                 if (string.IsNullOrEmpty(stockCode)) return;
-
                 Logger.Instance.Add($"[실시간 잔고변경] 계좌:{account.AccountNumber}, 종목:{stockCode}");
-
                 Dispatcher.Invoke(() =>
                 {
                     _apiRequestScheduler.EnqueueRequest(async (acc) =>
@@ -923,7 +784,6 @@ namespace All_New_Jongbet
         {
             Logger.Instance.Add("===== 매수 주문 테스트 시작 =====");
             UpdateStatus("Running Order Test...", "RequestingStatusLabel");
-
             foreach (var account in AccountManageList.Where(acc => acc.TokenStatus == "Success" && acc.HoldingStockList.Any()))
             {
                 foreach (var stock in account.HoldingStockList)
@@ -936,7 +796,6 @@ namespace All_New_Jongbet
                     }
                 }
             }
-
             Logger.Instance.Add("===== 모든 테스트 주문 요청이 완료되었습니다. =====");
             UpdateStatus("Order Test Finished", "StatusLabel");
         }
@@ -948,33 +807,12 @@ namespace All_New_Jongbet
 
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (e.ButtonState == MouseButtonState.Pressed)
-            {
-                this.DragMove();
-            }
+            if (e.ButtonState == MouseButtonState.Pressed) this.DragMove();
         }
 
-        private void CloseButton_Click(object sender, RoutedEventArgs e)
-        {
-            Application.Current.Shutdown();
-        }
-
-        private void MaximizeButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (this.WindowState == WindowState.Maximized)
-            {
-                this.WindowState = WindowState.Normal;
-            }
-            else
-            {
-                this.WindowState = WindowState.Maximized;
-            }
-        }
-
-        private void MinimizeButton_Click(object sender, RoutedEventArgs e)
-        {
-            this.WindowState = WindowState.Minimized;
-        }
+        private void CloseButton_Click(object sender, RoutedEventArgs e) => Application.Current.Shutdown();
+        private void MaximizeButton_Click(object sender, RoutedEventArgs e) => this.WindowState = this.WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+        private void MinimizeButton_Click(object sender, RoutedEventArgs e) => this.WindowState = WindowState.Minimized;
 
         public void SetupNotificationTimer()
         {
@@ -986,17 +824,8 @@ namespace All_New_Jongbet
         private void NotificationTimer_Callback(object state)
         {
             var now = DateTime.Now;
-
-            if (now.Hour == 0 && now.Minute == 0)
-            {
-                _isNotificationSentToday = false;
-            }
-
-            if (!Settings.Default.IsTelegramNotificationEnabled || _isNotificationSentToday)
-            {
-                return;
-            }
-
+            if (now.Hour == 0 && now.Minute == 0) _isNotificationSentToday = false;
+            if (!Settings.Default.IsTelegramNotificationEnabled || _isNotificationSentToday) return;
             if (now.ToString("HH:mm") == Settings.Default.TelegramNotificationTime)
             {
                 _isNotificationSentToday = true;
@@ -1008,23 +837,15 @@ namespace All_New_Jongbet
         {
             string botToken = Settings.Default.TelegramBotToken;
             string chatId = Settings.Default.TelegramChatId;
-
             if (string.IsNullOrEmpty(botToken) || string.IsNullOrEmpty(chatId))
             {
                 Logger.Instance.Add("[텔레그램 알림] 봇 토큰 또는 채팅 ID가 없어 메시지를 보낼 수 없습니다.");
                 return;
             }
-
             Logger.Instance.Add("[텔레그램 알림] 계좌 현황 요약 메시지를 준비합니다.");
-
             double totalAssets = AccountManageList.Sum(acc => acc.EstimatedDepositAsset);
             double totalProfitLoss = AccountManageList.Sum(acc => acc.TotalEvaluationProfitLoss);
-
-            string message = $"🔔 Jongbet 데일리 리포트 ({DateTime.Now:yyyy-MM-dd HH:mm})\n\n" +
-                             $"- 총 자산: {totalAssets:N0}원\n" +
-                             $"- 총 평가손익: {totalProfitLoss:N0}원\n\n" +
-                             $"오늘도 좋은 하루 되세요!";
-
+            string message = $"🔔 Jongbet 데일리 리포트 ({DateTime.Now:yyyy-MM-dd HH:mm})\n\n- 총 자산: {totalAssets:N0}원\n- 총 평가손익: {totalProfitLoss:N0}원\n\n오늘도 좋은 하루 되세요!";
             await _telegramService.SendMessageAsync(botToken, chatId, message);
         }
 
@@ -1032,13 +853,11 @@ namespace All_New_Jongbet
         {
             string botToken = Settings.Default.TelegramBotToken;
             string chatId = Settings.Default.TelegramChatId;
-
-            if (string.IsNullOrEmpty(botToken) || string.IsNullOrEmpty(chatId))
+            if (string.IsNullOrEmpty(botToken) || string.IsNullOrEmpty(chatId) || botToken == "BotToken" || chatId == "BotChatID")
             {
                 Logger.Instance.Add("[텔레그램] 봇 토큰 또는 채팅 ID가 설정되지 않아 봇을 시작할 수 없습니다.");
                 return;
             }
-
             await _telegramService.SetCommandsAsync(botToken);
             await _telegramService.ClearPendingMessagesAsync(botToken);
             _ = _telegramService.StartReceivingMessagesAsync(botToken, _appCts.Token);
@@ -1049,10 +868,8 @@ namespace All_New_Jongbet
         private async void HandleTelegramMessage(string chatId, string command)
         {
             if (chatId != Settings.Default.TelegramChatId) return;
-
             string botToken = Settings.Default.TelegramBotToken;
             string responseMessage = "알 수 없는 명령입니다.";
-
             switch (command)
             {
                 case "/daily_report":
@@ -1067,11 +884,8 @@ namespace All_New_Jongbet
                         }
                         return 0;
                     });
-                    responseMessage = $"📊 데일리 리포트 ({DateTime.Now:MM-dd HH:mm})\n\n" +
-                                      $"- 총 자산: {totalAssets:N0}원\n" +
-                                      $"- 당일 손익: {dailyChange:N0}원";
+                    responseMessage = $"📊 데일리 리포트 ({DateTime.Now:MM-dd HH:mm})\n\n- 총 자산: {totalAssets:N0}원\n- 당일 손익: {dailyChange:N0}원";
                     break;
-
                 case "/account_status":
                     var sb = new StringBuilder();
                     sb.AppendLine($"📋 전체 계좌 현황 ({DateTime.Now:MM-dd HH:mm})\n");
@@ -1080,7 +894,6 @@ namespace All_New_Jongbet
                         sb.AppendLine($"--- [{acc.AccountNumber}] ---");
                         sb.AppendLine($"- 총자산: {acc.EstimatedDepositAsset:N0}원");
                         sb.AppendLine($"- 평가손익: {acc.TotalEvaluationProfitLoss:N0}원");
-
                         double accDailyChange = 0;
                         if (acc.DailyAssetList != null && acc.DailyAssetList.Count >= 2)
                         {
@@ -1089,7 +902,6 @@ namespace All_New_Jongbet
                             accDailyChange = today.EstimatedAsset - yesterday.EstimatedAsset;
                         }
                         sb.AppendLine($"- 당일손익: {accDailyChange:N0}원");
-
                         if (acc.HoldingStockList != null && acc.HoldingStockList.Any())
                         {
                             sb.AppendLine("- 보유종목:");
@@ -1106,33 +918,20 @@ namespace All_New_Jongbet
                     }
                     responseMessage = sb.ToString();
                     break;
-
                 case "/asset_trend":
                     Logger.Instance.Add("[텔레그램] Asset Trend 차트 생성 요청 수신 (1개월, 3개월, 6개월).");
-
-                    var aggregatedAssets = AccountManageList
-                        .Where(acc => acc.DailyAssetList != null)
-                        .SelectMany(acc => acc.DailyAssetList)
-                        .GroupBy(d => d.Date)
-                        .Select(g => new DailyAssetInfo { Date = g.Key, EstimatedAsset = g.Sum(d => d.EstimatedAsset) })
-                        .OrderBy(d => d.Date)
-                        .ToList();
-
+                    var aggregatedAssets = AccountManageList.Where(acc => acc.DailyAssetList != null).SelectMany(acc => acc.DailyAssetList).GroupBy(d => d.Date).Select(g => new DailyAssetInfo { Date = g.Key, EstimatedAsset = g.Sum(d => d.EstimatedAsset) }).OrderBy(d => d.Date).ToList();
                     var chartGenerator = new ChartGenerator();
                     var tempFiles = new List<string>();
-
                     var last1MonthData = aggregatedAssets.Where(d => d.DateObject >= DateTime.Now.AddMonths(-1)).OrderBy(d => d.DateObject).ToList();
                     string path1Month = chartGenerator.CreateAssetTrendChartImage(last1MonthData, "최근 1개월 자산 추이");
                     if (!string.IsNullOrEmpty(path1Month)) tempFiles.Add(path1Month);
-
                     var last3MonthsData = aggregatedAssets.Where(d => d.DateObject >= DateTime.Now.AddMonths(-3)).OrderBy(d => d.DateObject).ToList();
                     string path3Months = chartGenerator.CreateAssetTrendChartImage(last3MonthsData, "최근 3개월 자산 추이");
                     if (!string.IsNullOrEmpty(path3Months)) tempFiles.Add(path3Months);
-
                     var last6MonthsData = aggregatedAssets.Where(d => d.DateObject >= DateTime.Now.AddMonths(-6)).OrderBy(d => d.DateObject).ToList();
                     string path6Months = chartGenerator.CreateAssetTrendChartImage(last6MonthsData, "최근 6개월 자산 추이");
                     if (!string.IsNullOrEmpty(path6Months)) tempFiles.Add(path6Months);
-
                     if (tempFiles.Any())
                     {
                         string mergedImagePath = MergeImagesVertically(tempFiles);
@@ -1141,51 +940,40 @@ namespace All_New_Jongbet
                             await _telegramService.SendPhotoAsync(botToken, chatId, mergedImagePath, "최근 1개월, 3개월, 6개월 자산 추이입니다.");
                             File.Delete(mergedImagePath);
                         }
-                        foreach (var file in tempFiles)
-                        {
-                            File.Delete(file);
-                        }
+                        foreach (var file in tempFiles) File.Delete(file);
                     }
                     else
                     {
                         await _telegramService.SendMessageAsync(botToken, chatId, "차트를 생성할 데이터가 부족합니다.");
                     }
                     return;
-
                 case "/start_trading":
                     _tradingManager?.StartTrading();
                     responseMessage = "✅ 자동매매를 시작합니다.";
                     break;
-
                 case "/stop_trading":
                     _tradingManager?.StopTrading();
                     responseMessage = "🛑 오늘 하루 자동매매를 중지합니다.";
                     break;
             }
-
             if (responseMessage != "알 수 없는 명령입니다.")
             {
                 await _telegramService.SendMessageAsync(botToken, chatId, responseMessage);
             }
-
         }
+
         private string MergeImagesVertically(List<string> imagePaths)
         {
             if (!imagePaths.Any()) return null;
-
             try
             {
                 List<System.Drawing.Bitmap> images = imagePaths.Select(System.Drawing.Image.FromFile).Cast<System.Drawing.Bitmap>().ToList();
-
                 int totalHeight = images.Sum(img => img.Height);
                 int maxWidth = images.Max(img => img.Width);
-
                 System.Drawing.Bitmap resultImage = new System.Drawing.Bitmap(maxWidth, totalHeight);
-
                 using (Graphics g = Graphics.FromImage(resultImage))
                 {
                     g.Clear(System.Drawing.Color.White);
-
                     int currentY = 0;
                     foreach (System.Drawing.Bitmap img in images)
                     {
@@ -1194,11 +982,9 @@ namespace All_New_Jongbet
                         img.Dispose();
                     }
                 }
-
                 string mergedPath = Path.Combine(Path.GetTempPath(), $"merged_asset_trend_{DateTime.Now.Ticks}.png");
                 resultImage.Save(mergedPath, System.Drawing.Imaging.ImageFormat.Png);
                 resultImage.Dispose();
-
                 return mergedPath;
             }
             catch (Exception ex)
