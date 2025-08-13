@@ -111,7 +111,7 @@ namespace All_New_Jongbet
             EstimatedDepositAsset = CashBalance + TotalEvaluationAmount;
 
             // [DEBUG LOG]
-            Logger.Instance.Add($"[DEBUG Recalculate] Account: {AccountNumber}, Cash: {CashBalance:N0}, StockValue: {TotalEvaluationAmount:N0}, TotalAsset: {EstimatedDepositAsset:N0}");
+            //Logger.Instance.Add($"[DEBUG Recalculate] Account: {AccountNumber}, Cash: {CashBalance:N0}, StockValue: {TotalEvaluationAmount:N0}, TotalAsset: {EstimatedDepositAsset:N0}");
 
             OnPropertyChanged(nameof(TotalPurchaseAmount));
             OnPropertyChanged(nameof(TotalEvaluationAmount));

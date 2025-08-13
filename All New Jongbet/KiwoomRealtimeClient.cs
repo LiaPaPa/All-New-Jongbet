@@ -122,10 +122,10 @@ namespace All_New_Jongbet
                             var responseString = Encoding.UTF8.GetString(ms.ToArray());
 
                             // [DEBUGGING CODE] 실시간 데이터 수신 여부 확인을 위한 로그 추가
-                            if (responseString.Contains("\"trnm\":\"REAL\""))
-                            {
-                                Logger.Instance.Add($"[실시간 데이터 수신] {responseString}");
-                            }
+                            //if (responseString.Contains("\"trnm\":\"REAL\""))
+                            //{
+                            //    Logger.Instance.Add($"[실시간 데이터 수신] {responseString}");
+                            //}
 
                             var response = JObject.Parse(responseString);
                             string trnm = response["trnm"]?.ToString();

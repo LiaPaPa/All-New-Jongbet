@@ -16,13 +16,11 @@ namespace All_New_Jongbet
 {
     public partial class DashboardPage : UserControl, INotifyPropertyChanged
     {
-        // Asset Trend 차트용 속성
         private List<DailyAssetInfo> _fullPeriodAggregatedAssets;
         public SeriesCollection SeriesCollection { get; set; }
         public string[] Labels { get; set; }
         public Func<double, string> YFormatter { get; set; }
 
-        // 상단 카드 및 원형 그래프용 속성
         public ObservableCollection<AccountStatusViewModel> AccountStatuses { get; set; }
         private string _totalAssetText;
         public string TotalAssetText { get => _totalAssetText; set { _totalAssetText = value; OnPropertyChanged(); } }
@@ -36,8 +34,6 @@ namespace All_New_Jongbet
         public Brush ProfitLossColor { get => _profitLossColor; set { _profitLossColor = value; OnPropertyChanged(); } }
         private Brush _dailyChangeColor;
         public Brush DailyChangeColor { get => _dailyChangeColor; set { _dailyChangeColor = value; OnPropertyChanged(); } }
-
-        // Today's Orders용 속성
         public ObservableCollection<OrderHistoryItem> OrderQueList { get; set; }
 
         public DashboardPage(ObservableCollection<AccountInfo> accounts, ObservableCollection<OrderHistoryItem> orderQue)
@@ -48,7 +44,6 @@ namespace All_New_Jongbet
             YFormatter = value => value.ToString("N0");
             OrderQueList = orderQue;
 
-            // [NEW] 차트 깜빡임 방지를 위해 애니메이션 비활성화
             AssetTrendChart.DisableAnimations = true;
 
             this.DataContext = this;
@@ -58,8 +53,6 @@ namespace All_New_Jongbet
         {
             if (accounts == null || !accounts.Any()) return;
 
-            double totalAssets = accounts.Sum(acc => acc.EstimatedDepositAsset);
-            double totalProfitLoss = accounts.Sum(acc => acc.TotalEvaluationProfitLoss);
             _fullPeriodAggregatedAssets = accounts
                 .Where(acc => acc.DailyAssetList != null)
                 .SelectMany(acc => acc.DailyAssetList)
@@ -67,28 +60,6 @@ namespace All_New_Jongbet
                 .Select(g => new DailyAssetInfo { Date = g.Key, EstimatedAsset = g.Sum(d => d.EstimatedAsset) })
                 .OrderBy(d => d.Date)
                 .ToList();
-
-            double dailyChange = 0;
-            double dailyChangeRate = 0;
-            if (_fullPeriodAggregatedAssets.Count >= 2)
-            {
-                var today = _fullPeriodAggregatedAssets.Last();
-                var yesterday = _fullPeriodAggregatedAssets[_fullPeriodAggregatedAssets.Count - 2];
-                dailyChange = today.EstimatedAsset - yesterday.EstimatedAsset;
-                if (yesterday.EstimatedAsset != 0)
-                {
-                    dailyChangeRate = (dailyChange / yesterday.EstimatedAsset) * 100;
-                }
-            }
-
-            TotalAssetText = totalAssets.ToString("N0");
-            TotalProfitLossText = totalProfitLoss.ToString("N0");
-            DailyChangeText = dailyChange.ToString("N0");
-            DailyChangeRateText = $"{dailyChangeRate:F2}%";
-
-            // [CHANGED] 수정된 색상 키 사용
-            ProfitLossColor = totalProfitLoss >= 0 ? (Brush)FindResource("PositiveRedBrush") : (Brush)FindResource("NegativeBlueBrush");
-            DailyChangeColor = dailyChange >= 0 ? (Brush)FindResource("PositiveRedBrush") : (Brush)FindResource("NegativeBlueBrush");
 
             for (int i = 0; i < _fullPeriodAggregatedAssets.Count; i++)
             {
@@ -98,8 +69,43 @@ namespace All_New_Jongbet
                     _fullPeriodAggregatedAssets[i].ProfitRate = 0;
             }
 
+            UpdateRealtimeUIData(accounts); // UI 업데이트 로직 호출
             FilterAndDisplayChart(30);
             if (Btn1m != null) Btn1m.IsChecked = true;
+        }
+
+        public void UpdateRealtimeUIData(ObservableCollection<AccountInfo> accounts)
+        {
+            if (accounts == null || !accounts.Any()) return;
+
+            double totalAssets = accounts.Sum(acc => acc.EstimatedDepositAsset);
+            double totalProfitLoss = accounts.Sum(acc => acc.TotalEvaluationProfitLoss);
+
+            double dailyChange = 0;
+            double dailyChangeRate = 0;
+            if (_fullPeriodAggregatedAssets != null && _fullPeriodAggregatedAssets.Count >= 2)
+            {
+                var todayData = _fullPeriodAggregatedAssets.LastOrDefault();
+                if (todayData != null && todayData.Date == DateTime.Today.ToString("yyyyMMdd"))
+                {
+                    todayData.EstimatedAsset = totalAssets;
+                }
+
+                var yesterday = _fullPeriodAggregatedAssets.Count > 1 ? _fullPeriodAggregatedAssets[_fullPeriodAggregatedAssets.Count - 2] : null;
+                if (todayData != null && yesterday != null && yesterday.EstimatedAsset != 0)
+                {
+                    dailyChange = todayData.EstimatedAsset - yesterday.EstimatedAsset;
+                    dailyChangeRate = (dailyChange / yesterday.EstimatedAsset) * 100;
+                }
+            }
+
+            TotalAssetText = totalAssets.ToString("N0");
+            TotalProfitLossText = totalProfitLoss.ToString("N0");
+            DailyChangeText = dailyChange.ToString("N0");
+            DailyChangeRateText = $"{dailyChangeRate:F2}%";
+
+            ProfitLossColor = totalProfitLoss >= 0 ? (Brush)FindResource("PositiveRedBrush") : (Brush)FindResource("NegativeBlueBrush");
+            DailyChangeColor = dailyChange >= 0 ? (Brush)FindResource("PositiveRedBrush") : (Brush)FindResource("NegativeBlueBrush");
 
             AccountStatuses.Clear();
             foreach (var account in accounts.Where(a => a.TokenStatus == "Success"))
@@ -113,10 +119,10 @@ namespace All_New_Jongbet
 
                 if (account.DailyAssetList != null && account.DailyAssetList.Count >= 2)
                 {
-                    var todayAssetInfo = account.DailyAssetList.OrderByDescending(d => d.Date).FirstOrDefault();
-                    var yesterdayAssetInfo = account.DailyAssetList.OrderByDescending(d => d.Date).Skip(1).FirstOrDefault();
+                    var todayAssetInfo = account.DailyAssetList.Last();
+                    var yesterdayAssetInfo = account.DailyAssetList.ElementAt(account.DailyAssetList.Count - 2);
 
-                    if (todayAssetInfo != null && yesterdayAssetInfo != null && yesterdayAssetInfo.EstimatedAsset > 0)
+                    if (yesterdayAssetInfo.EstimatedAsset > 0)
                     {
                         status.DailyProfitRate = (todayAssetInfo.EstimatedAsset / yesterdayAssetInfo.EstimatedAsset - 1);
                         status.DailyProfitLoss = todayAssetInfo.EstimatedAsset - yesterdayAssetInfo.EstimatedAsset;
@@ -127,25 +133,17 @@ namespace All_New_Jongbet
                 {
                     new PieSeries
                     {
-                        Title = "사용 비중",
-                        Values = new ChartValues<double> { status.AssetUsageRatio },
-                        Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#D81B60")),
-                        DataLabels = false,
-                        StrokeThickness = 0
+                        Title = "사용 비중", Values = new ChartValues<double> { status.AssetUsageRatio },
+                        Fill = (Brush)FindResource("AccentPurple"), DataLabels = false, StrokeThickness = 0
                     },
                     new PieSeries
                     {
-                        Title = "남은 비중",
-                        Values = new ChartValues<double> { 100 - status.AssetUsageRatio },
-                        Fill = new SolidColorBrush(Color.FromArgb(51, 74, 92, 197)),
-                        DataLabels = false,
-                        StrokeThickness = 0
+                        Title = "남은 비중", Values = new ChartValues<double> { 100 - status.AssetUsageRatio },
+                        Fill = (Brush)FindResource("SecondaryBackground"), DataLabels = false, StrokeThickness = 0
                     }
                 };
-
                 AccountStatuses.Add(status);
             }
-            OnPropertyChanged(nameof(AccountStatuses));
         }
 
         private void FilterAndDisplayChart(int days)
@@ -155,19 +153,17 @@ namespace All_New_Jongbet
             var filteredData = _fullPeriodAggregatedAssets.Skip(Math.Max(0, _fullPeriodAggregatedAssets.Count - days)).ToList();
             var profitRateMapper = new CartesianMapper<DailyAssetInfo>()
                 .Y(point => point.ProfitRate)
-                // [CHANGED] 수정된 색상 키 사용
                 .Fill(point => point.ProfitRate >= 0 ? (Brush)FindResource("PositiveRedBrush") : (Brush)FindResource("NegativeBlueBrush"));
 
-            // [CHANGED] 차트 깜빡임 현상 개선 로직
             if (SeriesCollection.Count == 2)
             {
-                // 이미 시리즈가 있으면 데이터만 업데이트
-                SeriesCollection[0].Values = new ChartValues<DailyAssetInfo>(filteredData);
-                SeriesCollection[1].Values = new ChartValues<DailyAssetInfo>(filteredData);
+                SeriesCollection[0].Values.Clear();
+                SeriesCollection[0].Values.AddRange(filteredData);
+                SeriesCollection[1].Values.Clear();
+                SeriesCollection[1].Values.AddRange(filteredData);
             }
             else
             {
-                // 시리즈가 없으면 새로 생성
                 SeriesCollection.Clear();
                 SeriesCollection.Add(new LineSeries
                 {
