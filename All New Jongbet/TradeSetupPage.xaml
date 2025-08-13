@@ -1,11 +1,11 @@
-﻿<Page x:Class="All_New_Jongbet.TradeSetupPage"
-      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
-      xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
-      mc:Ignorable="d" 
-      d:DesignHeight="800" d:DesignWidth="1200"
-      Title="TradeSetupPage" Background="#f0fdf4">
+﻿<UserControl x:Class="All_New_Jongbet.TradeSetupPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             mc:Ignorable="d" 
+             d:DesignHeight="800" d:DesignWidth="1200"
+             Background="Transparent">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -14,38 +14,40 @@
 
         <StackPanel Grid.Row="0">
             <Border Padding="40,25,40,15">
-                <TextBlock Text="Trade Setup" Foreground="#32325d" FontSize="28" FontWeight="Bold"/>
+                <TextBlock Text="Trade Setup" Foreground="{StaticResource PrimaryText}" FontSize="28" FontWeight="Bold"/>
             </Border>
-            <Rectangle Height="5" Fill="#5e72e4" RadiusX="2.5" RadiusY="2.5" Margin="40,0,40,25"/>
+            <Rectangle Height="3" Fill="{StaticResource AccentPurple}" RadiusX="1.5" RadiusY="1.5" Margin="40,0,40,25"/>
         </StackPanel>
 
-        <Grid Grid.Row="1" Margin="40,0,40,30">
+        <Grid Grid.Row="1" Margin="40,0,40,20">
             <Grid.ColumnDefinitions>
-                <!-- CHANGED: 좌우 너비를 3.5 : 6.5 비율로 변경 -->
                 <ColumnDefinition Width="3.5*"/>
                 <ColumnDefinition Width="6.5*"/>
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0" Style="{StaticResource KPICard}" Margin="0,0,10,0">
-                <StackPanel>
-                    <TextBlock Text="Strategy List" Style="{StaticResource CardTitle}" FontSize="16" Foreground="#32325d"/>
-                    <DataGrid x:Name="StrategyListDataGrid" ItemsSource="{Binding ActiveStrategyListView}" SelectionMode="Single" SelectionChanged="StrategyListDataGrid_SelectionChanged" Margin="0,10,0,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Text="Strategy List" Style="{StaticResource CardTitle}" FontSize="16" Foreground="{StaticResource PrimaryText}"/>
+                    <DataGrid Grid.Row="1" x:Name="StrategyListDataGrid" ItemsSource="{Binding ActiveStrategyListView}" SelectionMode="Single" SelectionChanged="StrategyListDataGrid_SelectionChanged" Margin="0,10,0,0">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="No" Binding="{Binding StrategyNumber}" Width="50" CellStyle="{StaticResource CenterAlignedCellStyle}"/>
                             <DataGridTextColumn Header="Account" Binding="{Binding AccountNumber}" Width="*"/>
                             <DataGridTextColumn Header="Condition" Binding="{Binding ConditionName}" Width="1.5*"/>
                         </DataGrid.Columns>
                     </DataGrid>
-                </StackPanel>
+                </Grid>
             </Border>
 
-            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Margin="10,0,0,0">
+            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="10,0,0,0">
                 <StackPanel DataContext="{Binding SelectedTradeSettings}">
-                    <!-- Buy Settings Card -->
                     <Border Style="{StaticResource KPICard}" Margin="0,0,0,20">
                         <StackPanel>
                             <Grid Margin="0,0,0,10">
-                                <TextBlock Text="Buy Settings" Style="{StaticResource CardTitle}" FontSize="16" Foreground="#32325d" VerticalAlignment="Center"/>
+                                <TextBlock Text="Buy Settings" Style="{StaticResource CardTitle}" FontSize="16" Foreground="{StaticResource PrimaryText}" VerticalAlignment="Center"/>
                                 <Button Content="Save" Style="{StaticResource SecondaryActionButton}" HorizontalAlignment="Right" Click="SaveButton_Click"/>
                             </Grid>
                             <Grid>
@@ -63,28 +65,27 @@
                                 </Grid.RowDefinitions>
 
                                 <StackPanel Grid.Row="0" Grid.Column="0" Style="{StaticResource SettingLabelStyleL1}">
-                                    <TextBlock Text="&#xE735;" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="#5e72e4"/>
-                                    <TextBlock Text="매수 유형"/>
+                                    <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="{StaticResource AccentPurple}"/>
+                                    <TextBlock Text="매수 유형" Foreground="{StaticResource SecondaryText}"/>
                                 </StackPanel>
-                                <ComboBox Grid.Row="0" Grid.Column="1" Style="{StaticResource SettingComboBoxStyle}" ItemsSource="{Binding DataContext.TradeTypes, RelativeSource={RelativeSource AncestorType=Page}}" SelectedItem="{Binding Buy.BuyType}" Margin="10,3"/>
+                                <ComboBox Grid.Row="0" Grid.Column="1" Style="{StaticResource SettingComboBoxStyle}" ItemsSource="{Binding DataContext.TradeTypes, RelativeSource={RelativeSource AncestorType=UserControl}}" SelectedItem="{Binding Buy.BuyType}" Margin="10,3"/>
                                 <StackPanel Grid.Row="0" Grid.Column="2" Style="{StaticResource SettingLabelStyleL1}" Margin="20,3,10,3">
-                                    <TextBlock Text="&#xE735;" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="#5e72e4"/>
-                                    <TextBlock Text="시분할 간격"/>
+                                    <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="{StaticResource AccentPurple}"/>
+                                    <TextBlock Text="시분할 간격" Foreground="{StaticResource SecondaryText}"/>
                                 </StackPanel>
-                                <TextBox Grid.Row="0" Grid.Column="3" Text="{Binding Buy.TimeDivisionInterval}" Margin="0,3" IsEnabled="{Binding Buy.IsTimeDivisionEnabled}"/>
+                                <TextBox Grid.Row="0" Grid.Column="3" Text="{Binding Buy.TimeDivisionInterval}" Margin="0,3" IsEnabled="{Binding Buy.IsTimeDivisionEnabled}" Style="{StaticResource SettingTextBoxStyle}"/>
 
                                 <StackPanel Grid.Row="1" Grid.Column="0" Style="{StaticResource SettingLabelStyleL1}">
-                                    <TextBlock Text="&#xE735;" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="#5e72e4"/>
-                                    <TextBlock Text="주문 타입"/>
+                                    <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="{StaticResource AccentPurple}"/>
+                                    <TextBlock Text="주문 타입" Foreground="{StaticResource SecondaryText}"/>
                                 </StackPanel>
-                                <ComboBox Grid.Row="1" Grid.Column="1" Style="{StaticResource SettingComboBoxStyle}" ItemsSource="{Binding DataContext.BuyOrderTypes, RelativeSource={RelativeSource AncestorType=Page}}" SelectedItem="{Binding Buy.OrderType}" Margin="10,3"/>
+                                <ComboBox Grid.Row="1" Grid.Column="1" Style="{StaticResource SettingComboBoxStyle}" ItemsSource="{Binding DataContext.BuyOrderTypes, RelativeSource={RelativeSource AncestorType=UserControl}}" SelectedItem="{Binding Buy.OrderType}" Margin="10,3"/>
 
                                 <StackPanel Grid.Row="2" Grid.Column="0" Style="{StaticResource SettingLabelStyleL1}">
-                                    <TextBlock Text="&#xE735;" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="#5e72e4"/>
-                                    <TextBlock Text="매수 시작시간"/>
+                                    <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="{StaticResource AccentPurple}"/>
+                                    <TextBlock Text="매수 시작시간" Foreground="{StaticResource SecondaryText}"/>
                                 </StackPanel>
                                 <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Margin="10,3">
-                                    <!-- CHANGED: StringFormat=D2 추가 -->
                                     <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Buy.BuyStartHour, StringFormat=D2}" Width="35" MaxLength="2"/>
                                     <TextBlock Text=":" VerticalAlignment="Center" Margin="5,0"/>
                                     <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Buy.BuyStartMinute, StringFormat=D2}" Width="35" MaxLength="2"/>
@@ -93,25 +94,24 @@
                                 </StackPanel>
 
                                 <StackPanel Grid.Row="2" Grid.Column="2" Style="{StaticResource SettingLabelStyleL1}" Margin="20,3,10,3">
-                                    <TextBlock Text="&#xE735;" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="#5e72e4"/>
-                                    <TextBlock Text="매수 비중"/>
+                                    <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="{StaticResource AccentPurple}"/>
+                                    <TextBlock Text="매수 비중" Foreground="{StaticResource SecondaryText}"/>
                                 </StackPanel>
                                 <TextBox Grid.Row="2" Grid.Column="3" Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Buy.BuyWeight}" Margin="0,3"/>
 
                                 <StackPanel Grid.Row="3" Grid.Column="0" Style="{StaticResource SettingLabelStyleL1}">
-                                    <TextBlock Text="&#xE735;" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="#5e72e4"/>
-                                    <TextBlock Text="우선순위"/>
+                                    <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="{StaticResource AccentPurple}"/>
+                                    <TextBlock Text="우선순위" Foreground="{StaticResource SecondaryText}"/>
                                 </StackPanel>
-                                <ComboBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3" Style="{StaticResource SettingComboBoxStyle}" ItemsSource="{Binding DataContext.PriorityOptions, RelativeSource={RelativeSource AncestorType=Page}}" SelectedItem="{Binding Buy.Priority}" Margin="10,3"/>
+                                <ComboBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3" Style="{StaticResource SettingComboBoxStyle}" ItemsSource="{Binding DataContext.PriorityOptions, RelativeSource={RelativeSource AncestorType=UserControl}}" SelectedItem="{Binding Buy.Priority}" Margin="10,3"/>
                             </Grid>
                         </StackPanel>
                     </Border>
 
-                    <!-- Sell Settings Card -->
                     <Border Style="{StaticResource KPICard}">
                         <StackPanel>
                             <Grid Margin="0,0,0,10">
-                                <TextBlock Text="Sell Settings" Style="{StaticResource CardTitle}" FontSize="16" Foreground="#32325d" VerticalAlignment="Center"/>
+                                <TextBlock Text="Sell Settings" Style="{StaticResource CardTitle}" FontSize="16" Foreground="{StaticResource PrimaryText}" VerticalAlignment="Center"/>
                                 <Button Content="Save" Style="{StaticResource SecondaryActionButton}" HorizontalAlignment="Right" Click="SaveButton_Click"/>
                             </Grid>
                             <Grid>
@@ -135,25 +135,25 @@
                                 </Grid.RowDefinitions>
 
                                 <StackPanel Grid.Row="0" Grid.Column="0" Style="{StaticResource SettingLabelStyleL1}">
-                                    <TextBlock Text="&#xE735;" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="#5e72e4"/>
-                                    <TextBlock Text="매도 유형"/>
+                                    <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="{StaticResource AccentPurple}"/>
+                                    <TextBlock Text="매도 유형" Foreground="{StaticResource SecondaryText}"/>
                                 </StackPanel>
-                                <ComboBox Grid.Row="0" Grid.Column="1" Style="{StaticResource SettingComboBoxStyle}" ItemsSource="{Binding DataContext.TradeTypes, RelativeSource={RelativeSource AncestorType=Page}}" SelectedItem="{Binding Sell.SellType}" Margin="10,3"/>
+                                <ComboBox Grid.Row="0" Grid.Column="1" Style="{StaticResource SettingComboBoxStyle}" ItemsSource="{Binding DataContext.TradeTypes, RelativeSource={RelativeSource AncestorType=UserControl}}" SelectedItem="{Binding Sell.SellType}" Margin="10,3"/>
                                 <StackPanel Grid.Row="0" Grid.Column="2" Style="{StaticResource SettingLabelStyleL1}" Margin="20,3,10,3">
-                                    <TextBlock Text="&#xE735;" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="#5e72e4"/>
-                                    <TextBlock Text="시분할 간격"/>
+                                    <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="{StaticResource AccentPurple}"/>
+                                    <TextBlock Text="시분할 간격" Foreground="{StaticResource SecondaryText}"/>
                                 </StackPanel>
-                                <TextBox Grid.Row="0" Grid.Column="3" Text="{Binding Sell.TimeDivisionInterval}" Margin="0,3" IsEnabled="{Binding Sell.IsTimeDivisionEnabled}"/>
+                                <TextBox Grid.Row="0" Grid.Column="3" Text="{Binding Sell.TimeDivisionInterval}" Margin="0,3" IsEnabled="{Binding Sell.IsTimeDivisionEnabled}" Style="{StaticResource SettingTextBoxStyle}"/>
 
                                 <StackPanel Grid.Row="1" Grid.Column="0" Style="{StaticResource SettingLabelStyleL1}">
-                                    <TextBlock Text="&#xE735;" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="#5e72e4"/>
-                                    <TextBlock Text="주문 타입"/>
+                                    <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="{StaticResource AccentPurple}"/>
+                                    <TextBlock Text="주문 타입" Foreground="{StaticResource SecondaryText}"/>
                                 </StackPanel>
-                                <ComboBox Grid.Row="1" Grid.Column="1" Style="{StaticResource SettingComboBoxStyle}" ItemsSource="{Binding DataContext.SellOrderTypes, RelativeSource={RelativeSource AncestorType=Page}}" SelectedItem="{Binding Sell.OrderType}" Margin="10,3"/>
+                                <ComboBox Grid.Row="1" Grid.Column="1" Style="{StaticResource SettingComboBoxStyle}" ItemsSource="{Binding DataContext.SellOrderTypes, RelativeSource={RelativeSource AncestorType=UserControl}}" SelectedItem="{Binding Sell.OrderType}" Margin="10,3"/>
 
                                 <StackPanel Grid.Row="2" Grid.Column="0" Style="{StaticResource SettingLabelStyleL1}">
-                                    <TextBlock Text="&#xE735;" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="#5e72e4"/>
-                                    <TextBlock Text="매도 시작시간"/>
+                                    <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="{StaticResource AccentPurple}"/>
+                                    <TextBlock Text="매도 시작시간" Foreground="{StaticResource SecondaryText}"/>
                                 </StackPanel>
                                 <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Margin="10,3">
                                     <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.SellStartHour, StringFormat=D2}" Width="35" MaxLength="2"/>
@@ -163,8 +163,8 @@
                                     <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.SellStartSecond, StringFormat=D2}" Width="35" MaxLength="2"/>
                                 </StackPanel>
                                 <StackPanel Grid.Row="2" Grid.Column="2" Style="{StaticResource SettingLabelStyleL1}" Margin="20,3,10,3">
-                                    <TextBlock Text="&#xE735;" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="#5e72e4"/>
-                                    <TextBlock Text="매도 종료시간"/>
+                                    <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="{StaticResource AccentPurple}"/>
+                                    <TextBlock Text="매도 종료시간" Foreground="{StaticResource SecondaryText}"/>
                                 </StackPanel>
                                 <StackPanel Grid.Row="2" Grid.Column="3" Orientation="Horizontal" Margin="0,3">
                                     <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.SellEndHour, StringFormat=D2}" Width="35" MaxLength="2"/>
@@ -175,47 +175,47 @@
                                 </StackPanel>
 
                                 <StackPanel Grid.Row="3" Grid.Column="0" Style="{StaticResource SettingLabelStyleL1}">
-                                    <TextBlock Text="&#xE735;" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="#5e72e4"/>
-                                    <TextBlock Text="목표가 유형"/>
+                                    <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="{StaticResource AccentPurple}"/>
+                                    <TextBlock Text="목표가 유형" Foreground="{StaticResource SecondaryText}"/>
                                 </StackPanel>
-                                <ComboBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3" Style="{StaticResource SettingComboBoxStyle}" ItemsSource="{Binding DataContext.TargetPriceTypes, RelativeSource={RelativeSource AncestorType=Page}}" SelectedItem="{Binding Sell.TargetPriceType}" Margin="10,3"/>
+                                <ComboBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3" Style="{StaticResource SettingComboBoxStyle}" ItemsSource="{Binding DataContext.TargetPriceTypes, RelativeSource={RelativeSource AncestorType=UserControl}}" SelectedItem="{Binding Sell.TargetPriceType}" Margin="10,3"/>
 
                                 <StackPanel Grid.Row="4" Grid.Column="0" Style="{StaticResource SettingLabelStyleL2}">
-                                    <TextBlock Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="8" Margin="0,0,5,0" Foreground="#8898aa"/>
+                                    <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="8" Margin="0,0,5,0"/>
                                     <TextBlock Text="단순 목표가"/>
                                 </StackPanel>
-                                <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding Sell.SimpleTargetPrice}" Margin="10,3" IsEnabled="{Binding Sell.IsSimpleTargetEnabled}"/>
+                                <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding Sell.SimpleTargetPrice}" Margin="10,3" IsEnabled="{Binding Sell.IsSimpleTargetEnabled}" Style="{StaticResource SettingTextBoxStyle}"/>
 
                                 <StackPanel Grid.Row="5" Grid.Column="0" Style="{StaticResource SettingLabelStyleL2}">
-                                    <TextBlock Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="8" Margin="0,0,5,0" Foreground="#8898aa"/>
+                                    <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="8" Margin="0,0,5,0"/>
                                     <TextBlock Text="트레일링 감시가"/>
                                 </StackPanel>
-                                <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding Sell.TrailingTriggerPrice}" Margin="10,3" IsEnabled="{Binding Sell.IsTrailingStopEnabled}"/>
+                                <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding Sell.TrailingTriggerPrice}" Margin="10,3" IsEnabled="{Binding Sell.IsTrailingStopEnabled}" Style="{StaticResource SettingTextBoxStyle}"/>
                                 <StackPanel Grid.Row="5" Grid.Column="2" Style="{StaticResource SettingLabelStyleL2}" Margin="20,3,10,3">
-                                    <TextBlock Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="8" Margin="0,0,5,0" Foreground="#8898aa"/>
+                                    <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="8" Margin="0,0,5,0"/>
                                     <TextBlock Text="트레일링 하락율"/>
                                 </StackPanel>
-                                <TextBox Grid.Row="5" Grid.Column="3" Text="{Binding Sell.TrailingStopRate}" Margin="0,3" IsEnabled="{Binding Sell.IsTrailingStopEnabled}"/>
+                                <TextBox Grid.Row="5" Grid.Column="3" Text="{Binding Sell.TrailingStopRate}" Margin="0,3" IsEnabled="{Binding Sell.IsTrailingStopEnabled}" Style="{StaticResource SettingTextBoxStyle}"/>
 
                                 <StackPanel Grid.Row="6" Grid.Column="0" Style="{StaticResource SettingLabelStyleL2}">
-                                    <TextBlock Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="8" Margin="0,0,5,0" Foreground="#8898aa"/>
+                                    <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="8" Margin="0,0,5,0"/>
                                     <TextBlock Text="스탑로스 목표가"/>
                                 </StackPanel>
-                                <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding Sell.StopLossTargetPrice}" Margin="10,3" IsEnabled="{Binding Sell.IsStopLossEnabled}"/>
+                                <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding Sell.StopLossTargetPrice}" Margin="10,3" IsEnabled="{Binding Sell.IsStopLossEnabled}" Style="{StaticResource SettingTextBoxStyle}"/>
                                 <StackPanel Grid.Row="6" Grid.Column="2" Style="{StaticResource SettingLabelStyleL2}" Margin="20,3,10,3">
-                                    <TextBlock Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="8" Margin="0,0,5,0" Foreground="#8898aa"/>
+                                    <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="8" Margin="0,0,5,0"/>
                                     <TextBlock Text="스탑로스 보존가"/>
                                 </StackPanel>
-                                <TextBox Grid.Row="6" Grid.Column="3" Text="{Binding Sell.StopLossPreservePrice}" Margin="0,3" IsEnabled="{Binding Sell.IsStopLossEnabled}"/>
+                                <TextBox Grid.Row="6" Grid.Column="3" Text="{Binding Sell.StopLossPreservePrice}" Margin="0,3" IsEnabled="{Binding Sell.IsStopLossEnabled}" Style="{StaticResource SettingTextBoxStyle}"/>
 
                                 <StackPanel Grid.Row="7" Grid.Column="0" Style="{StaticResource SettingLabelStyleL1}">
-                                    <TextBlock Text="&#xE735;" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="#5e72e4"/>
-                                    <TextBlock Text="청산 방법"/>
+                                    <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="{StaticResource AccentPurple}"/>
+                                    <TextBlock Text="청산 방법" Foreground="{StaticResource SecondaryText}"/>
                                 </StackPanel>
-                                <ComboBox Grid.Row="7" Grid.Column="1" Style="{StaticResource SettingComboBoxStyle}" ItemsSource="{Binding DataContext.SellOrderTypes, RelativeSource={RelativeSource AncestorType=Page}}" SelectedItem="{Binding Sell.LiquidationMethod}" Margin="10,3"/>
+                                <ComboBox Grid.Row="7" Grid.Column="1" Style="{StaticResource SettingComboBoxStyle}" ItemsSource="{Binding DataContext.SellOrderTypes, RelativeSource={RelativeSource AncestorType=UserControl}}" SelectedItem="{Binding Sell.LiquidationMethod}" Margin="10,3"/>
                                 <StackPanel Grid.Row="7" Grid.Column="2" Style="{StaticResource SettingLabelStyleL1}" Margin="20,3,10,3">
-                                    <TextBlock Text="&#xE735;" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="#5e72e4"/>
-                                    <TextBlock Text="청산시간"/>
+                                    <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="{StaticResource AccentPurple}"/>
+                                    <TextBlock Text="청산시간" Foreground="{StaticResource SecondaryText}"/>
                                 </StackPanel>
                                 <StackPanel Grid.Row="7" Grid.Column="3" Orientation="Horizontal" Margin="0,3">
                                     <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.LiquidationHour, StringFormat=D2}" Width="35" MaxLength="2"/>
@@ -226,21 +226,21 @@
                                 </StackPanel>
 
                                 <StackPanel Grid.Row="8" Grid.Column="0" Style="{StaticResource SettingLabelStyleL1}">
-                                    <TextBlock Text="&#xE735;" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="#5e72e4"/>
-                                    <TextBlock Text="반등 컷"/>
+                                    <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="{StaticResource AccentPurple}"/>
+                                    <TextBlock Text="반등 컷" Foreground="{StaticResource SecondaryText}"/>
                                 </StackPanel>
                                 <StackPanel Grid.Row="8" Grid.Column="1" Grid.ColumnSpan="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,3">
-                                    <RadioButton Content="사용" GroupName="ReboundCut" IsChecked="{Binding Sell.UseReboundCut}"/>
-                                    <RadioButton Content="미사용" GroupName="ReboundCut" Margin="10,0,0,0"/>
+                                    <RadioButton Content="사용" GroupName="ReboundCut" IsChecked="{Binding Sell.UseReboundCut}" Foreground="{StaticResource PrimaryText}"/>
+                                    <RadioButton Content="미사용" GroupName="ReboundCut" Margin="10,0,0,0" IsChecked="True" Foreground="{StaticResource PrimaryText}"/>
                                 </StackPanel>
 
                                 <StackPanel Grid.Row="9" Grid.Column="0" Style="{StaticResource SettingLabelStyleL2}">
-                                    <TextBlock Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="8" Margin="0,0,5,0" Foreground="#8898aa"/>
+                                    <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="8" Margin="0,0,5,0"/>
                                     <TextBlock Text="최저수익률 기준"/>
                                 </StackPanel>
                                 <TextBox Grid.Row="9" Grid.Column="1" Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.ReboundCutMinProfitRate}" Margin="10,3"/>
                                 <StackPanel Grid.Row="9" Grid.Column="2" Style="{StaticResource SettingLabelStyleL2}" Margin="20,3,10,3">
-                                    <TextBlock Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="8" Margin="0,0,5,0" Foreground="#8898aa"/>
+                                    <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="8" Margin="0,0,5,0"/>
                                     <TextBlock Text="반등비율/반등량"/>
                                 </StackPanel>
                                 <Grid Grid.Row="9" Grid.Column="3" Margin="0,3">
@@ -254,14 +254,11 @@
                                     <TextBox Grid.Column="2" Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.ReboundCutAmount}"/>
                                 </Grid>
                             </Grid>
-
-                            <Button Content="Run Order Test" Style="{StaticResource SecondaryActionButton}" HorizontalAlignment="Right" VerticalAlignment="Top" Click="RunOrderTest_Click" Margin="20,0,0,0"/>
-
+                            <Button Content="Run Order Test" Style="{StaticResource SecondaryActionButton}" HorizontalAlignment="Right" VerticalAlignment="Top" Click="RunOrderTest_Click" Margin="0,10,0,0"/>
                         </StackPanel>
-                        
                     </Border>
                 </StackPanel>
             </ScrollViewer>
         </Grid>
     </Grid>
-</Page>
+</UserControl>

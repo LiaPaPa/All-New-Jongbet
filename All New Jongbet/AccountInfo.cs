@@ -36,10 +36,8 @@ namespace All_New_Jongbet
             }
         }
 
-        // NEW: 마지막 API 요청 시간을 기록 (고정밀도 타이머 Ticks)
         public long LastRequestTimestamp { get; set; }
 
-        // NEW: 계좌별 조건식 목록을 저장할 리스트
         public List<ConditionInfo> Conditions { get; set; }
 
 
@@ -49,6 +47,8 @@ namespace All_New_Jongbet
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
+        // [NEW] 실시간 자산 계산을 위해 현금 잔고 속성 추가
+        public double CashBalance { get; set; }
         public double TotalPurchaseAmount { get; set; }
         public double TotalEvaluationAmount { get; set; }
         public double TotalEvaluationProfitLoss { get; set; }
@@ -66,11 +66,9 @@ namespace All_New_Jongbet
                     _estimatedDepositAsset = value;
                     OnPropertyChanged(nameof(EstimatedDepositAsset));
 
-                    // 동기화 로직: DailyAssetList의 마지막(오늘) 데이터도 함께 업데이트
                     if (DailyAssetList != null && DailyAssetList.Any())
                     {
                         var todayData = DailyAssetList.Last();
-                        // 날짜가 오늘 날짜와 같으면 자산 값 업데이트
                         if (todayData.Date == DateTime.Today.ToString("yyyyMMdd"))
                         {
                             todayData.EstimatedAsset = value;
@@ -80,43 +78,46 @@ namespace All_New_Jongbet
             }
         }
 
-        public List<HoldingStock> HoldingStockList { get; set; }
+        // [CHANGED] List -> ObservableCollection으로 변경하여 UI 자동 업데이트 지원
+        public ObservableCollection<HoldingStock> HoldingStockList { get; set; }
 
-        // NEW: 일별 자산 현황 리스트 (차트 데이터용)
         public ObservableCollection<DailyAssetInfo> DailyAssetList { get; set; }
 
         public AccountInfo()
         {
             DailyAssetList = new ObservableCollection<DailyAssetInfo>();
+            // [NEW] 생성자에서 초기화
+            HoldingStockList = new ObservableCollection<HoldingStock>();
         }
 
-        // [NEW] 보유 종목 변경 시 계좌 전체 요약 정보를 다시 계산하고 UI에 알리는 메서드
+        // [CHANGED] 실시간 시세 변동에 따른 계좌 정보 전체를 재계산하는 메서드
         public void RecalculateAndUpdateTotals()
         {
             if (HoldingStockList == null || !HoldingStockList.Any())
             {
-                // 보유 종목이 없으면 평가 관련 금액은 0으로 처리
                 TotalPurchaseAmount = 0;
                 TotalEvaluationAmount = 0;
-                TotalEvaluationProfitLoss = 0;
-                TotalProfitRate = 0;
-                // 추정예탁자산은 현금 잔고만 남게 됨 (여기서는 단순화하여 0으로 처리,
-                // 실제로는 현금 잔액을 별도 관리해야 함)
             }
             else
             {
                 TotalPurchaseAmount = HoldingStockList.Sum(s => s.PurchaseAmount);
                 TotalEvaluationAmount = HoldingStockList.Sum(s => s.EvaluationAmount);
-                TotalEvaluationProfitLoss = TotalEvaluationAmount - TotalPurchaseAmount;
-                TotalProfitRate = (TotalPurchaseAmount > 0) ? (TotalEvaluationProfitLoss / TotalPurchaseAmount) * 100 : 0;
             }
 
-            // 변경된 속성들을 UI에 알림
+            TotalEvaluationProfitLoss = TotalEvaluationAmount - TotalPurchaseAmount;
+            TotalProfitRate = (TotalPurchaseAmount > 0) ? (TotalEvaluationProfitLoss / TotalPurchaseAmount) * 100 : 0;
+
+            // [NEW] 현금 + 주식평가액으로 실시간 추정예탁자산 재계산
+            EstimatedDepositAsset = CashBalance + TotalEvaluationAmount;
+
+            // [DEBUG LOG]
+            //Logger.Instance.Add($"[DEBUG Recalculate] Account: {AccountNumber}, Cash: {CashBalance:N0}, StockValue: {TotalEvaluationAmount:N0}, TotalAsset: {EstimatedDepositAsset:N0}");
+
             OnPropertyChanged(nameof(TotalPurchaseAmount));
             OnPropertyChanged(nameof(TotalEvaluationAmount));
             OnPropertyChanged(nameof(TotalEvaluationProfitLoss));
             OnPropertyChanged(nameof(TotalProfitRate));
-            OnPropertyChanged(nameof(EstimatedDepositAsset)); // 추정예탁자산도 함께 업데이트
+            // OnPropertyChanged(nameof(EstimatedDepositAsset)); // EstimatedDepositAsset의 set 접근자에서 이미 호출됨
         }
     }
 }

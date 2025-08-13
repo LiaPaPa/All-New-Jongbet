@@ -82,7 +82,10 @@ namespace All_New_Jongbet
                     account.TotalProfitRate = (double)response.JsonData["tot_prft_rt"];
                     account.EstimatedDepositAsset = (double)response.JsonData["prsm_dpst_aset_amt"];
 
-                    var holdings = new List<HoldingStock>();
+                    // [NEW] 현금 잔고 계산 및 저장
+                    account.CashBalance = account.EstimatedDepositAsset - account.TotalEvaluationAmount;
+
+                    account.HoldingStockList.Clear(); // 기존 목록 비우기
                     if (response.JsonData["acnt_evlt_remn_indv_tot"] is JArray holdingsJArray)
                     {
                         foreach (var item in holdingsJArray)
@@ -101,11 +104,10 @@ namespace All_New_Jongbet
                                 PurchaseAmount = double.TryParse(item["pur_amt"]?.ToString(), out var purAmt) ? purAmt : 0,
                                 EvaluationAmount = double.TryParse(item["evlt_amt"]?.ToString(), out var evltAmt) ? evltAmt : 0
                             };
-                            holdings.Add(stock);
+                            account.HoldingStockList.Add(stock); // ObservableCollection에 추가
                         }
                     }
-                    account.HoldingStockList = holdings;
-                    Logger.Instance.Add($"[TR 응답] {account.AccountNumber} 계좌평가잔고 조회 성공. 보유종목: {account.HoldingStockList.Count}개");
+                    Logger.Instance.Add($"[TR 응답] {account.AccountNumber} 계좌평가잔고 조회 성공. 보유종목: {account.HoldingStockList.Count}개, 현금: {account.CashBalance:N0}원");
                     return true;
                 }
                 catch (Exception ex)

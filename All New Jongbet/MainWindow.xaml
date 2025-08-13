@@ -7,66 +7,84 @@
         mc:Ignorable="d"
         Title="All_New_Jongbet" Height="800" Width="1280"
         WindowStartupLocation="CenterScreen"
-        FontFamily="Century Gothic">
+        FontFamily="Century Gothic"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent">
 
-    <Grid Background="#f0fdf4">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="250"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
+    <Border CornerRadius="8" Background="{StaticResource PrimaryBackground}" BorderBrush="{StaticResource BorderColor}" BorderThickness="1">
+        <Border.Effect>
+            <DropShadowEffect ShadowDepth="0" BlurRadius="15" Color="Black" Opacity="0.3"/>
+        </Border.Effect>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="120"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
 
-        <Border Grid.Column="0" Background="White" BorderBrush="#dee2e6" BorderThickness="0,0,1,0">
-            <Grid>
+            <Border Grid.Column="0" CornerRadius="8,0,0,8" BorderBrush="{StaticResource BorderColor}" BorderThickness="0,0,1,0">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#373737" Offset="0.0" />
+                        <GradientStop Color="#303030" Offset="1.0" />
+                    </LinearGradientBrush>
+                </Border.Background>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,25,0,25">
+                        <TextBlock Text="new" Foreground="Gold" FontSize="16" FontFamily="Bahnschrift"/>
+                        <TextBlock Text="JONGBET" Foreground="White" FontSize="20" FontFamily="./Fonts/#Avocalist" FontWeight="Bold"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="1" Margin="0,10,0,0">
+                        <ToggleButton x:Name="DashboardButton" Content="Dashboard" Tag="&#xE8A9;" Style="{StaticResource SidebarButton}" IsEnabled="False" Click="NavigateButton_Click"/>
+                        <Expander x:Name="SetupExpander" Header="Setup" Tag="" Style="{StaticResource SidebarExpanderStyle}">
+                            <StackPanel>
+                                <ToggleButton x:Name="TradeSetupButton" Content="Trade Setup" Tag="" Style="{StaticResource SidebarButton}" IsEnabled="False" Click="NavigateButton_Click"/>
+                                <ToggleButton x:Name="StrategySetupButton" Content="Strategy Setup" Tag="" Style="{StaticResource SidebarButton}" IsEnabled="False" Click="NavigateButton_Click"/>
+                            </StackPanel>
+                        </Expander>
+                        <ToggleButton x:Name="LogsButton" Content="Logs" Tag="" Style="{StaticResource SidebarButton}" IsEnabled="False" Click="NavigateButton_Click"/>
+                    </StackPanel>
+
+                    <Button Grid.Row="2" x:Name="SettingsButton" Content="Settings" Tag="" Style="{StaticResource SidebarFooterButton}" VerticalAlignment="Bottom" IsEnabled="False" Click="FooterButton_Click"/>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Column="1" ClipToBounds="True">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,30,0,30">
-                    <TextBlock Text="new" Foreground="Gold" FontSize="20" FontFamily="Bahnschrift"/>
-                    <TextBlock Text="JONGBET" Foreground="#32325d" FontSize="40" FontFamily="./Fonts/#Avocalist" FontWeight="Bold"/>
-                </StackPanel>
+                <Border Grid.Row="0" Padding="30,5,10,5" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                    <Grid Background="Transparent">
+                        <ItemsControl ItemsSource="{Binding DisplayedNotifications}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Label Content="{Binding Message}" Style="{Binding StyleKey, Converter={StaticResource StyleConverter}}" Margin="0,0,10,0"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
 
-                <StackPanel Grid.Row="1">
-                    <ToggleButton x:Name="DashboardButton" Content="Dashboard" Tag="&#xE75E;" Style="{StaticResource SidebarButton}" IsEnabled="False" Click="NavigateButton_Click"/>
-
-                    <Expander x:Name="SetupExpander" Header="Setup" Tag="&#xE8D5;" Style="{StaticResource SidebarExpanderStyle}">
-                        <StackPanel>
-                            <ToggleButton x:Name="TradeSetupButton" Content="Trade Setup" Tag="&#xE9E9;" Style="{StaticResource SidebarButton}" IsEnabled="False" Click="NavigateButton_Click"/>
-                            <ToggleButton x:Name="StrategySetupButton" Content="Strategy Setup" Tag="&#xE9D5;" Style="{StaticResource SidebarButton}" IsEnabled="False" Click="NavigateButton_Click"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button x:Name="MinimizeButton" Content="&#xE921;" Style="{StaticResource WindowControlButton}" Click="MinimizeButton_Click"/>
+                            <Button x:Name="MaximizeButton" Content="&#xE922;" Style="{StaticResource WindowControlButton}" Click="MaximizeButton_Click"/>
+                            <Button x:Name="CloseButton" Content="&#xE711;" Style="{StaticResource WindowCloseButton}" Click="CloseButton_Click"/>
                         </StackPanel>
-                    </Expander>
+                    </Grid>
+                </Border>
 
-                    <ToggleButton x:Name="LogsButton" Content="Logs" Tag="&#xE7E7;" Style="{StaticResource SidebarButton}" IsEnabled="False" Click="NavigateButton_Click"/>
-                </StackPanel>
-
-                <Button Grid.Row="2" x:Name="SettingsButton" Content="Settings" Tag="&#xE713;" Style="{StaticResource SidebarFooterButton}" VerticalAlignment="Bottom" IsEnabled="False" Click="FooterButton_Click"/>
+                <ContentControl Grid.Row="1" x:Name="MainContentControl"/>
             </Grid>
-        </Border>
-
-        <Grid Grid.Column="1">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
-
-            <Border Grid.Row="0" Padding="30,15" Background="#f0fdf4">
-                <ItemsControl ItemsSource="{Binding DisplayedNotifications}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <StackPanel Orientation="Horizontal"/>
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Label Content="{Binding Message}" Style="{Binding StyleKey, Converter={StaticResource StyleConverter}}" Margin="0,0,10,0"/>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </Border>
-
-            <Frame Grid.Row="1" x:Name="MainFrame" NavigationUIVisibility="Hidden"/>
         </Grid>
-    </Grid>
+    </Border>
 </Window>

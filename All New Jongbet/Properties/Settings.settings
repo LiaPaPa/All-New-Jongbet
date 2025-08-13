@@ -1,7 +1,18 @@
 ﻿<?xml version='1.0' encoding='utf-8'?>
-<SettingsFile xmlns="uri:settings" CurrentProfile="(Default)">
-  <Profiles>
-    <Profile Name="(Default)" />
-  </Profiles>
-  <Settings />
+<SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="All_New_Jongbet.Properties" GeneratedClassName="Settings">
+  <Profiles />
+  <Settings>
+    <Setting Name="IsTelegramNotificationEnabled" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
+    <Setting Name="TelegramBotToken" Type="System.String" Scope="User">
+      <Value Profile="(Default)">BotToken</Value>
+    </Setting>
+    <Setting Name="TelegramChatId" Type="System.String" Scope="User">
+      <Value Profile="(Default)">BotChatID</Value>
+    </Setting>
+    <Setting Name="TelegramNotificationTime" Type="System.String" Scope="User">
+      <Value Profile="(Default)">15:30</Value>
+    </Setting>
+  </Settings>
 </SettingsFile>

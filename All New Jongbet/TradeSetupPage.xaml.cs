@@ -14,7 +14,7 @@ using System.Windows.Data;
 
 namespace All_New_Jongbet
 {
-    public partial class TradeSetupPage : Page, INotifyPropertyChanged
+    public partial class TradeSetupPage : UserControl, INotifyPropertyChanged
     {
         private MainWindow _mainWindow;
         private readonly ObservableCollection<StrategyInfo> _masterStrategyList;

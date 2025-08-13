@@ -1,0 +1,69 @@
+﻿<Window x:Class="All_New_Jongbet.HoldingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:All_New_Jongbet"
+        xmlns:sys="clr-namespace:System;assembly=mscorlib"
+        mc:Ignorable="d"
+        Title="Holdings" Height="600" Width="380"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent">
+
+    <Border CornerRadius="12" Background="#2d2d30" BorderBrush="#007ACC" BorderThickness="2">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown" Padding="10,5">
+                <Grid>
+                    <TextBlock x:Name="TitleText" Text="Holdings" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="10,0,0,0" Foreground="{StaticResource PrimaryText}"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="&#xE921;" Style="{StaticResource WindowControlButton}" Click="MinimizeButton_Click"/>
+                        <Button Content="&#xE922;" Style="{StaticResource WindowControlButton}" Click="MaximizeButton_Click"/>
+                        <Button Content="&#xE711;" Style="{StaticResource WindowCloseButton}" Click="CloseButton_Click"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                <!-- [CHANGED] ItemsSource를 AccountInfo의 HoldingStockList에 직접 바인딩 -->
+                <ItemsControl ItemsSource="{Binding HoldingStockList}" AlternationCount="{x:Static sys:Int32.MaxValue}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource KPICard}" Margin="15,4" Padding="12">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Column="0" Text="{Binding (ItemsControl.AlternationIndex), RelativeSource={RelativeSource AncestorType=ContentPresenter}, Converter={StaticResource IndexConverter}}" 
+                                               VerticalAlignment="Center" FontSize="18" FontWeight="Bold" Foreground="{StaticResource SecondaryText}" Margin="0,0,20,0"/>
+
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding StockName}" FontSize="18" FontWeight="Bold" Foreground="{StaticResource PrimaryText}"/>
+                                        <TextBlock Text="{Binding StockCode}" FontSize="12" Foreground="{StaticResource SecondaryText}" Margin="0,2,0,0"/>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                        <TextBlock Text="{Binding CurrentPrice, StringFormat=N0}" FontSize="18" FontWeight="Bold" HorizontalAlignment="Right" Foreground="{StaticResource PrimaryText}"/>
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,2,0,0">
+                                            <TextBlock Text="{Binding PurchasePrice, StringFormat=N0}" FontSize="12" Foreground="{StaticResource SecondaryText}"/>
+                                            <TextBlock Text="{Binding ProfitRate, StringFormat={}{0:F2}%}" FontSize="12" FontWeight="SemiBold" Margin="5,0,0,0"
+                                                       Foreground="{Binding ProfitRate, Converter={StaticResource ProfitLossColorConv}}"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Grid>
+    </Border>
+</Window>
+

@@ -39,9 +39,6 @@ namespace All_New_Jongbet
         public DateTime LastExecutionDate { get; set; } = DateTime.MinValue;
 
         [JsonIgnore]
-        public List<StockItem> ConditionSearchResultList { get; set; }
-
-        [JsonIgnore]
         public List<SearchedStock> SearchedStockList { get; set; }
 
         [JsonIgnore]

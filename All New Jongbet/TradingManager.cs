@@ -21,6 +21,7 @@ namespace All_New_Jongbet
         private readonly ClientWebSocket _ws;
         private readonly ConcurrentDictionary<string, TaskCompletionSource<JObject>> _wsResponseTasks;
         private Dictionary<int, bool> _liquidationExecuted;
+        public bool IsTradingEnabled { get; private set; } = true; // 자동매매 활성화 상태 플래그
 
         public TradingManager(KiwoomApiService apiService, ObservableCollection<StrategyInfo> strategies, ObservableCollection<AccountInfo> accountList, ApiRequestScheduler scheduler, ClientWebSocket ws, ConcurrentDictionary<string, TaskCompletionSource<JObject>> wsResponseTasks)
         {
@@ -31,6 +32,20 @@ namespace All_New_Jongbet
             _ws = ws;
             _wsResponseTasks = wsResponseTasks;
             _liquidationExecuted = new Dictionary<int, bool>();
+        }
+
+        // [NEW] 자동매매를 시작하는 public 메서드
+        public void StartTrading()
+        {
+            IsTradingEnabled = true;
+            Logger.Instance.Add("자동매매가 [시작]되었습니다.");
+        }
+
+        // [NEW] 자동매매를 중지하는 public 메서드
+        public void StopTrading()
+        {
+            IsTradingEnabled = false;
+            Logger.Instance.Add("자동매매가 [중지]되었습니다. (오늘 하루 실행되지 않습니다)");
         }
 
         public async Task StartAsync(CancellationToken cancellationToken)
@@ -55,7 +70,15 @@ namespace All_New_Jongbet
 
         private async Task ExecuteTradingCycleAsync()
         {
+            if (!IsTradingEnabled) return;
+
             DateTime now = DateTime.Now;
+            if (now.Hour == 0 && now.Minute < 2) // 자정 이후 초기화
+            {
+                IsTradingEnabled = true; // 매일 자정이 지나면 다시 시작 상태로 변경
+                _liquidationExecuted.Clear();
+            }
+
             if (!App.IsDebugMode && now.Hour >= 18)
             {
                 if (now.Hour == 18 && now.Minute < 1)
@@ -88,76 +111,66 @@ namespace All_New_Jongbet
 
         private async Task LiquidatePositionsIfNeededAsync(StrategyInfo strategy, AccountInfo account)
         {
-            // CHANGED: 로그 형식 통일
-            Logger.Instance.Add($"[{strategy.ConditionName}] [청산] 로직을 시작합니다.");
+            Logger.Instance.Add($"[{strategy.ConditionName}] 매수 시작 1분 전, 잔여 포지션 청산을 시작합니다.");
 
             var unfilledOrders = await _apiService.GetUnfilledOrdersAsync(account);
-            await Task.Delay(MainWindow.ApiRequestDelay);
+            await Task.Delay(300);
 
             var buyOrdersToCancel = unfilledOrders.Where(o => o.OrderTypeCode.Contains("매수")).ToList();
             if (buyOrdersToCancel.Any())
             {
-                // CHANGED: 로그 형식 통일
-                Logger.Instance.Add($"[{strategy.ConditionName}] [청산] 미체결 매수 주문 {buyOrdersToCancel.Count}건을 취소합니다.");
+                Logger.Instance.Add($" -> {buyOrdersToCancel.Count}건의 미체결 매수 주문을 취소합니다.");
                 foreach (var order in buyOrdersToCancel)
                 {
                     await _apiService.SendCancelOrderAsync(account, order.StockCode, order.OrderNumber, order.UnfilledQuantity);
-                    await Task.Delay(MainWindow.ApiRequestDelay);
+                    await Task.Delay(300);
                 }
             }
 
             await _apiService.GetAccountBalanceAsync(account);
-            await Task.Delay(MainWindow.ApiRequestDelay);
+            await Task.Delay(300);
             var holdings = account.HoldingStockList;
 
             var sellOrdersToCancel = unfilledOrders.Where(o => o.OrderTypeCode.Contains("매도")).ToList();
             foreach (var order in sellOrdersToCancel)
             {
-                // CHANGED: 로그 형식 통일
-                Logger.Instance.Add($"[{strategy.ConditionName}] [청산] 미체결 매도 주문({order.StockName}) 취소 후 시장가로 재주문합니다.");
+                Logger.Instance.Add($" -> 미체결 매도 주문({order.StockName})을 취소하고 시장가로 재주문합니다.");
                 await _apiService.SendCancelOrderAsync(account, order.StockCode, order.OrderNumber, order.UnfilledQuantity);
-                await Task.Delay(MainWindow.ApiRequestDelay);
+                await Task.Delay(300);
             }
 
             if (holdings == null || !holdings.Any())
             {
-                // CHANGED: 로그 형식 통일
-                Logger.Instance.Add($"[{strategy.ConditionName}] [청산] 청산할 보유 종목이 없습니다.");
+                Logger.Instance.Add(" -> 청산할 잔여 종목이 없습니다.");
                 return;
             }
 
-            // CHANGED: 로그 형식 통일
-            Logger.Instance.Add($"[{strategy.ConditionName}] [청산] 보유 종목 {holdings.Count}개를 시장가로 매도합니다.");
+            Logger.Instance.Add($" -> {holdings.Count}개의 보유 종목을 시장가로 매도합니다.");
             foreach (var stock in holdings)
             {
                 if (stock.TradableQuantity > 0)
                 {
                     await _apiService.SendSellOrderAsync(account, stock.StockCode, stock.TradableQuantity, 0, "3");
-                    await Task.Delay(MainWindow.ApiRequestDelay);
+                    await Task.Delay(300);
                 }
             }
-            // CHANGED: 로그 형식 통일
-            Logger.Instance.Add($"[{strategy.ConditionName}] [청산] 로직을 종료합니다.");
+            Logger.Instance.Add(" -> 모든 잔여 포지션에 대한 청산 주문이 완료되었습니다.");
         }
 
         private async Task ExecuteBuyLogicAsync(StrategyInfo strategy, AccountInfo account)
         {
-            // CHANGED: 로그 형식 통일
-            Logger.Instance.Add($"[{strategy.ConditionName}] [매수] 로직을 시작합니다.");
+            Logger.Instance.Add($"[{strategy.ConditionName}] 매수 로직을 실행합니다.");
 
             var searchedStocks = await GetConditionSearchResultAsync(strategy);
             if (searchedStocks == null || !searchedStocks.Any())
             {
-                // CHANGED: 로그 형식 통일
-                Logger.Instance.Add($"[{strategy.ConditionName}] [매수] 조건검색 결과: 포착된 종목이 없습니다.");
+                Logger.Instance.Add($" -> [{strategy.ConditionName}] 결과: 포착된 종목 없음");
                 strategy.LastExecutionDate = DateTime.Today;
                 StrategyRepository.Save(_strategies);
-                // CHANGED: 로그 형식 통일
-                Logger.Instance.Add($"[{strategy.ConditionName}] [매수] 로직을 종료합니다.");
+                Logger.Instance.Add($"[{strategy.ConditionName}] 포착된 종목이 없어 오늘 전략 실행을 완료 처리합니다.");
                 return;
             }
-            // CHANGED: 로그 형식 통일
-            Logger.Instance.Add($"[{strategy.ConditionName}] [매수] 조건검색 결과: {searchedStocks.Count}개 종목 포착.");
+            Logger.Instance.Add($" -> [{strategy.ConditionName}] 결과: {searchedStocks.Count}개 종목 포착");
 
             var detailedStocks = await FetchAllStockDataAsync(searchedStocks);
             var prioritizedStocks = CalculatePriorityAndSort(detailedStocks, strategy.TradeSettings.Buy.Priority);
@@ -165,16 +178,14 @@ namespace All_New_Jongbet
 
             foreach (var stock in stocksToOrder)
             {
-                // CHANGED: 로그 형식 통일
-                Logger.Instance.Add($"[{strategy.ConditionName}] [매수] 주문 실행: {stock.StockName} ({stock.OrderPrice:N0}원 x {stock.OrderQuantity}주)");
+                Logger.Instance.Add($" -> [매수 주문 시도] 종목: {stock.StockName}, 가격: {stock.OrderPrice:N0}, 수량: {stock.OrderQuantity}");
                 await _apiService.SendBuyOrderAsync(account, stock.StockCode, stock.OrderQuantity, stock.OrderPrice, "5");
-                await Task.Delay(MainWindow.ApiRequestDelay);
+                await Task.Delay(300);
             }
 
             strategy.LastExecutionDate = DateTime.Today;
             StrategyRepository.Save(_strategies);
-            // CHANGED: 로그 형식 통일
-            Logger.Instance.Add($"[{strategy.ConditionName}] [매수] 모든 주문 전송이 완료되어 로직을 종료합니다.");
+            Logger.Instance.Add($"[{strategy.ConditionName}] 매수 주문 시도가 완료되어, 오늘 전략 실행을 완료 처리합니다.");
         }
 
         private async Task<List<SearchedStock>> FetchAllStockDataAsync(List<SearchedStock> initialList)
@@ -184,11 +195,11 @@ namespace All_New_Jongbet
 
             var stockCodes = initialList.Select(s => s.StockCode).ToArray();
             var detailedStocks = await _apiService.GetWatchlistDetailsAsync(primaryAccount, stockCodes);
-            await Task.Delay(MainWindow.ApiRequestDelay);
+            await Task.Delay(300);
 
             var chartResults = new ConcurrentDictionary<string, List<DailyChartData>>();
             var tasks = new List<Task>();
-            string today = DateTime.Today.ToString("yyyyMMdd");
+            string yesterday = DateTime.Today.AddDays(-1).ToString("yyyyMMdd");
 
             foreach (var stock in detailedStocks)
             {
@@ -198,7 +209,7 @@ namespace All_New_Jongbet
                 _apiRequestScheduler.EnqueueRequest(async (acc) => {
                     try
                     {
-                        var chartData = await _apiService.GetDailyChartAsync(acc, stock.StockCode, today);
+                        var chartData = await _apiService.GetDailyChartAsync(acc, stock.StockCode, yesterday);
                         chartResults[stock.StockCode] = chartData;
                     }
                     catch (Exception ex)
@@ -271,8 +282,7 @@ namespace All_New_Jongbet
             if (maxStocksToBuy == 0) return new List<SearchedStock>();
 
             var selectedStocks = stocks.Take(maxStocksToBuy).ToList();
-            // CHANGED: 로그 형식 통일
-            Logger.Instance.Add($"[{_strategies.FirstOrDefault(s => s.AccountNumber == account.AccountNumber)?.ConditionName}] [매수] 매수 비중({settings.BuyWeight}%)에 따라 최대 {maxStocksToBuy}개 종목을 주문합니다.");
+            Logger.Instance.Add($" -> 매수 비중({settings.BuyWeight}%)에 따라 최대 {maxStocksToBuy}개 종목을 매수합니다.");
 
             double budgetPerStock = account.EstimatedDepositAsset * (settings.BuyWeight / 100.0);
             foreach (var stock in selectedStocks)
@@ -292,38 +302,8 @@ namespace All_New_Jongbet
             return Task.CompletedTask;
         }
 
-        public async Task<List<ConditionInfo>> GetConditionListAsync()
-        {
-            try
-            {
-                var requestPacket = new { trnm = "CNSRLST" };
-                var response = await SendWsRequestAsync("CNSRLST", requestPacket);
-
-                if (response?["return_code"]?.ToString() == "0")
-                {
-                    var conditions = new List<ConditionInfo>();
-                    if (response["data"] is JObject data && data["list"] is JArray list)
-                    {
-                        foreach (var item in list)
-                        {
-                            conditions.Add(new ConditionInfo
-                            {
-                                Index = item["seq"]?.ToString(),
-                                Name = item["cnsr_nm"]?.ToString()
-                            });
-                        }
-                    }
-                    Logger.Instance.Add($"조건검색식 목록 조회 성공: {conditions.Count}개");
-                    return conditions;
-                }
-                Logger.Instance.Add($"[오류] 조건검색식 목록 조회 실패: {response?["return_msg"]}");
-            }
-            catch (Exception ex)
-            {
-                Logger.Instance.Add($"[오류] 조건검색식 목록 조회 중 예외: {ex.Message}");
-            }
-            return new List<ConditionInfo>();
-        }
+        // [REMOVED] 이 메서드는 MainWindow.xaml.cs로 이동하여 삭제
+        // public async Task<List<ConditionInfo>> GetConditionListAsync() { ... }
 
         private async Task<List<SearchedStock>> GetConditionSearchResultAsync(StrategyInfo strategy)
         {

@@ -52,29 +52,40 @@ namespace All_New_Jongbet
             }
         }
 
-        // [수정] 요청을 보내기 직전에 상세 정보를 Tuple에 기록합니다.
-        public Task RegisterRealtimeAsync(string groupNumber, string[] items, string[] types)
+        // [CHANGED] refresh 파라미터 추가 (기본값 "1")
+        public Task RegisterRealtimeAsync(string groupNumber, string[] items, string[] types, string refresh = "1")
         {
             var regPacket = new
             {
                 trnm = "REG",
                 grp_no = groupNumber,
-                refresh = "1",
+                refresh = refresh, // 파라미터 사용
                 data = new[] { new { item = items, type = types } }
             };
 
             string description = GetRealtimeTypeDescription(types.FirstOrDefault());
-            string itemLog = items.Length > 1 ? $"{items.Length}개 종목" : (items.FirstOrDefault() ?? "");
+            string itemLog = items.Length > 1 ? $"{items.Length}개 종목" : (items.FirstOrDefault() ?? "전체");
 
             lock (_lock)
             {
-                // 요청 상세 정보를 Tuple로 저장
                 _lastRequestDetails = Tuple.Create(description, groupNumber, itemLog);
             }
 
-            Logger.Instance.Add($"[{description}] 실시간 등록 요청 (grp_no={groupNumber}, items={itemLog})");
+            Logger.Instance.Add($"[{description}] 실시간 등록 요청 (grp_no={groupNumber}, items={itemLog}, refresh={refresh})");
 
             return SendMessageAsync(regPacket);
+        }
+
+        // [NEW] 실시간 구독 해지 메서드
+        public Task UnregisterRealtimeAsync(string groupNumber)
+        {
+            var unregPacket = new
+            {
+                trnm = "REMOVE",
+                grp_no = groupNumber
+            };
+            Logger.Instance.Add($"[실시간 해지 요청] (grp_no={groupNumber})");
+            return SendMessageAsync(unregPacket);
         }
 
         private string GetRealtimeTypeDescription(string typeCode)
@@ -84,12 +95,12 @@ namespace All_New_Jongbet
                 case "00": return "주문체결";
                 case "04": return "잔고정보";
                 case "0B": return "주식체결";
+                case "0C": return "주식우선호가";
                 case "0D": return "주식호가잔량";
                 default: return "기타 실시간 항목";
             }
         }
 
-        // [수정] REG 응답을 받았을 때, 저장해둔 상세 정보를 사용하여 로그를 출력합니다.
         private async Task ReceiveLoopAsync()
         {
             var buffer = new byte[4096];
@@ -109,6 +120,13 @@ namespace All_New_Jongbet
                         if (ms.Length > 0)
                         {
                             var responseString = Encoding.UTF8.GetString(ms.ToArray());
+
+                            // [DEBUGGING CODE] 실시간 데이터 수신 여부 확인을 위한 로그 추가
+                            //if (responseString.Contains("\"trnm\":\"REAL\""))
+                            //{
+                            //    Logger.Instance.Add($"[실시간 데이터 수신] {responseString}");
+                            //}
+
                             var response = JObject.Parse(responseString);
                             string trnm = response["trnm"]?.ToString();
 
@@ -153,7 +171,7 @@ namespace All_New_Jongbet
                                         Logger.Instance.Add($"[WebSocket 수신] 실시간 항목 등록 실패: {response["return_msg"]}");
                                     }
                                 }
-                                else if (App.IsDebugMode)
+                                else if (App.IsDebugMode && !responseString.Contains("\"trnm\":\"REAL\"")) // 디버그 모드이고, 실시간 데이터가 아닐 때만 전체 로그 출력
                                 {
                                     Logger.Instance.Add($"[WebSocket 수신] {responseString}");
                                 }
