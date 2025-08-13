@@ -132,6 +132,19 @@ namespace All_New_Jongbet
                     continue;
                 }
 
+        private async Task ConnectAllWebsocketsAsync()
+        {
+            Logger.Instance.Add("AppKey별 웹소켓 연결을 시작합니다.");
+            int accountIndex = 0;
+
+            foreach (var account in AccountManageList.Where(acc => acc.TokenStatus == "Success"))
+            {
+                if (_realtimeClients.ContainsKey(account.AppKey))
+                {
+                    Logger.Instance.Add($"{account.AccountNumber} 계좌의 AppKey에 대한 웹소켓은 이미 연결되어 있습니다.");
+                    continue;
+                }
+
                 UpdateStatus($"Connecting WebSocket for AppKey {account.AppKey.Substring(0, 8)}...", "RequestingStatusLabel");
 
                 var wsClient = new KiwoomRealtimeClient(account.Token);
