@@ -870,6 +870,17 @@ namespace All_New_Jongbet
             if (chatId != Settings.Default.TelegramChatId) return;
             string botToken = Settings.Default.TelegramBotToken;
             string responseMessage = "알 수 없는 명령입니다.";
+
+            // 버튼 텍스트 → 명령어 변환
+            switch (command?.Trim().ToLower())
+            {
+                case "daily report": command = "/daily_report"; break;
+                case "account status": command = "/account_status"; break;
+                case "asset trend": command = "/asset_trend"; break;
+                case "start": command = "/start_trading"; break;
+                case "stop": command = "/stop_trading"; break;
+            }
+
             switch (command)
             {
                 case "/daily_report":
@@ -956,6 +967,7 @@ namespace All_New_Jongbet
                     responseMessage = "🛑 오늘 하루 자동매매를 중지합니다.";
                     break;
             }
+
             if (responseMessage != "알 수 없는 명령입니다.")
             {
                 await _telegramService.SendMessageAsync(botToken, chatId, responseMessage);
