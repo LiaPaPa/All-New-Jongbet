@@ -1,30 +1,39 @@
-﻿<Window x:Class="All_New_Jongbet.MainWindow"
+<Window x:Class="All_New_Jongbet.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:All_New_Jongbet"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         mc:Ignorable="d"
-        Title="All_New_Jongbet" Height="800" Width="1280"
+        Title="All_New_Jongbet" Height="700" Width="1000"
         WindowStartupLocation="CenterScreen"
-        FontFamily="Century Gothic"
+        FontFamily="Segoe UI"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent">
 
-    <Border CornerRadius="8" Background="{StaticResource PrimaryBackground}" BorderBrush="{StaticResource BorderColor}" BorderThickness="1">
+    <Border CornerRadius="12" BorderBrush="{StaticResource BorderColor}" BorderThickness="1">
+        <Border.Background>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Color="#13131E" Offset="0.0"/>
+                <GradientStop Color="#1E1E2E" Offset="0.5"/>
+                <GradientStop Color="#13131E" Offset="1.0"/>
+            </LinearGradientBrush>
+        </Border.Background>
         <Border.Effect>
-            <DropShadowEffect ShadowDepth="0" BlurRadius="15" Color="Black" Opacity="0.3"/>
+            <DropShadowEffect ShadowDepth="0" BlurRadius="20" Color="#000000" Opacity="0.5"/>
         </Border.Effect>
         <Grid>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="120"/>
+                <ColumnDefinition Width="80"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" CornerRadius="8,0,0,8" BorderBrush="{StaticResource BorderColor}" BorderThickness="0,0,1,0">
+            <!-- ═════════ Sidebar ═════════ -->
+            <Border Grid.Column="0" CornerRadius="12,0,0,12" BorderBrush="{StaticResource BorderColor}" BorderThickness="0,0,1,0">
                 <Border.Background>
-                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                        <GradientStop Color="#373737" Offset="0.0" />
-                        <GradientStop Color="#303030" Offset="1.0" />
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0.5,1">
+                        <GradientStop Color="#FF191937" Offset="0.0" />
+                        <GradientStop Color="#FF3D3D42" Offset="1.0" />
                     </LinearGradientBrush>
                 </Border.Background>
                 <Grid>
@@ -34,34 +43,45 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,25,0,25">
-                        <TextBlock Text="new" Foreground="Gold" FontSize="16" FontFamily="Bahnschrift"/>
-                        <TextBlock Text="JONGBET" Foreground="White" FontSize="20" FontFamily="./Fonts/#Avocalist" FontWeight="Bold"/>
+                    <!-- Logo -->
+                    <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,28,0,20">
+                        <TextBlock Text="NEW" Foreground="{StaticResource AccentGreen}" FontSize="10" FontFamily="Bahnschrift" HorizontalAlignment="Center" Opacity="0.85"/>
+                        <TextBlock Text="JONGBET" Foreground="White" FontSize="14" FontFamily="./Fonts/#Avocalist" FontWeight="Bold" HorizontalAlignment="Center"/>
                     </StackPanel>
 
-                    <StackPanel Grid.Row="1" Margin="0,10,0,0">
-                        <ToggleButton x:Name="DashboardButton" Content="Dashboard" Tag="&#xE8A9;" Style="{StaticResource SidebarButton}" IsEnabled="False" Click="NavigateButton_Click"/>
-                        <Expander x:Name="SetupExpander" Header="Setup" Tag="" Style="{StaticResource SidebarExpanderStyle}">
+                    <!-- Nav Items -->
+                    <StackPanel Grid.Row="1" Margin="0,5,0,0">
+                        <ToggleButton x:Name="DashboardButton" Content="Main" Tag="&#xE8A9;" Style="{StaticResource SidebarButton}" IsEnabled="False" Click="NavigateButton_Click"/>
+                        <Expander x:Name="SetupExpander" Header="Setup" Tag="&#xEBE6;" Style="{StaticResource SidebarExpanderStyle}">
                             <StackPanel>
-                                <ToggleButton x:Name="TradeSetupButton" Content="Trade Setup" Tag="" Style="{StaticResource SidebarButton}" IsEnabled="False" Click="NavigateButton_Click"/>
-                                <ToggleButton x:Name="StrategySetupButton" Content="Strategy Setup" Tag="" Style="{StaticResource SidebarButton}" IsEnabled="False" Click="NavigateButton_Click"/>
+                                <ToggleButton x:Name="TradeSetupButton" Content="Trade" Tag="&#xE81E;" Style="{StaticResource SidebarButton}" IsEnabled="False" Click="NavigateButton_Click"/>
+                                <ToggleButton x:Name="StrategySetupButton" Content="Strategy" Tag="&#xE909;" Style="{StaticResource SidebarButton}" IsEnabled="False" Click="NavigateButton_Click"/>
                             </StackPanel>
                         </Expander>
-                        <ToggleButton x:Name="LogsButton" Content="Logs" Tag="" Style="{StaticResource SidebarButton}" IsEnabled="False" Click="NavigateButton_Click"/>
+                        <ToggleButton x:Name="LogsButton" Content="Logs" Tag="&#xE8F1;" Style="{StaticResource SidebarButton}" IsEnabled="False" Click="NavigateButton_Click"/>
                     </StackPanel>
 
-                    <Button Grid.Row="2" x:Name="SettingsButton" Content="Settings" Tag="" Style="{StaticResource SidebarFooterButton}" VerticalAlignment="Bottom" IsEnabled="False" Click="FooterButton_Click"/>
+                    <!-- Footer -->
+                    <Button Grid.Row="2" x:Name="SettingsButton" Content="Settings" Tag="&#xE713;" Style="{StaticResource SidebarFooterButton}" VerticalAlignment="Bottom" IsEnabled="False" Click="FooterButton_Click"/>
                 </Grid>
             </Border>
 
+            <!-- ═════════ Main Content Area ═════════ -->
             <Grid Grid.Column="1" ClipToBounds="True">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <Border Grid.Row="0" Padding="30,5,10,5" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
-                    <Grid Background="Transparent">
+                <!-- Title Bar -->
+                <Border Grid.Row="0" Padding="30,8,10,8" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0.5,1">
+                            <GradientStop Color="#FF191937" Offset="0.0" />
+                            <GradientStop Color="#FF2C2C31" Offset="1.0" />
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <Grid>
                         <ItemsControl ItemsSource="{Binding DisplayedNotifications}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
@@ -75,7 +95,35 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <ToggleButton x:Name="TestModeButton" Content="TEST MODE" Margin="0,0,10,0" Width="80" Height="26"
+                                          Background="#353548" Foreground="{StaticResource SecondaryText}" BorderBrush="{StaticResource BorderColor}" BorderThickness="1"
+                                          FontSize="10" FontFamily="Bahnschrift" FontWeight="SemiBold"
+                                          Checked="TestModeButton_Checked" Unchecked="TestModeButton_Unchecked">
+                                <ToggleButton.Style>
+                                    <Style TargetType="ToggleButton">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="ToggleButton">
+                                                    <Border x:Name="border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6">
+                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsChecked" Value="True">
+                                                            <Setter TargetName="border" Property="Background" Value="#E53935"/>
+                                                            <Setter TargetName="border" Property="BorderBrush" Value="#C62828"/>
+                                                            <Setter Property="Foreground" Value="White"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter TargetName="border" Property="Background" Value="#454558"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </ToggleButton.Style>
+                            </ToggleButton>
                             <Button x:Name="MinimizeButton" Content="&#xE921;" Style="{StaticResource WindowControlButton}" Click="MinimizeButton_Click"/>
                             <Button x:Name="MaximizeButton" Content="&#xE922;" Style="{StaticResource WindowControlButton}" Click="MaximizeButton_Click"/>
                             <Button x:Name="CloseButton" Content="&#xE711;" Style="{StaticResource WindowCloseButton}" Click="CloseButton_Click"/>
@@ -83,6 +131,7 @@
                     </Grid>
                 </Border>
 
+                <!-- Page Content -->
                 <ContentControl Grid.Row="1" x:Name="MainContentControl"/>
             </Grid>
         </Grid>

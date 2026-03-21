@@ -1,4 +1,4 @@
-﻿// HoldingStock.cs 파일 전체를 아래 코드로 교체하세요.
+// HoldingStock.cs 파일 전체를 아래 코드로 교체하세요.
 
 using Newtonsoft.Json;
 
@@ -66,5 +66,9 @@ namespace All_New_Jongbet
 
         private double _bestBidPrice;
         public double BestBidPrice { get => _bestBidPrice; set { _bestBidPrice = value; OnPropertyChanged(); } }
+
+        // [NEW] 매수 이후 최고가 저장
+        private double _maxPriceSincePurchase;
+        public double MaxPriceSincePurchase { get => _maxPriceSincePurchase; set { _maxPriceSincePurchase = value; OnPropertyChanged(); } }
     }
 }

@@ -1,4 +1,4 @@
-﻿// KiwoomApiService.cs 파일 전체를 아래 코드로 교체하세요.
+// KiwoomApiService.cs 파일 전체를 아래 코드로 교체하세요.
 
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -30,7 +30,7 @@ namespace All_New_Jongbet
             var jsonMessage = JsonConvert.SerializeObject(message);
             if (log && App.IsDebugMode)
             {
-                Logger.Instance.Add($"[WebSocket 전송 Body] {jsonMessage}");
+                // Logger.Instance.Add($"[WebSocket 전송 Body] {jsonMessage}");
             }
             var messageBuffer = Encoding.UTF8.GetBytes(jsonMessage);
             return ws.SendAsync(new ArraySegment<byte>(messageBuffer), WebSocketMessageType.Text, true, CancellationToken.None);
@@ -44,15 +44,15 @@ namespace All_New_Jongbet
 
             try
             {
-                Logger.Instance.Add("[TR 요청 시작] 접근토큰 발급 (au10001)");
+                // Logger.Instance.Add("[TR 요청 시작] 접근토큰 발급 (au10001)");
                 HttpResponseMessage response = await httpClient.PostAsync(requestUrl, content);
                 var responseString = await response.Content.ReadAsStringAsync();
-                Logger.Instance.Add("[TR 수신 완료] 접근토큰 발급 (au10001)");
+                // Logger.Instance.Add("[TR 수신 완료] 접근토큰 발급 (au10001)");
 
                 if (response.IsSuccessStatusCode)
                 {
                     dynamic result = JsonConvert.DeserializeObject(responseString);
-                    Logger.Instance.Add("[TR 응답] 접근토큰 발급 성공");
+                    // Logger.Instance.Add("[TR 응답] 접근토큰 발급 성공");
                     return (result.token, true);
                 }
                 else
@@ -107,6 +107,11 @@ namespace All_New_Jongbet
                             account.HoldingStockList.Add(stock); // ObservableCollection에 추가
                         }
                     }
+
+                    // [NEW] 처리 완료 후 잔고에 없는 종목들의 최고가 기록 정리
+                    var currentHoldingCodes = new HashSet<string>(account.HoldingStockList.Select(s => s.StockCode));
+                    MaxPriceRepository.Cleanup(account.AccountNumber, currentHoldingCodes);
+
                     Logger.Instance.Add($"[TR 응답] {account.AccountNumber} 계좌평가잔고 조회 성공. 보유종목: {account.HoldingStockList.Count}개, 현금: {account.CashBalance:N0}원");
                     return true;
                 }
@@ -243,8 +248,6 @@ namespace All_New_Jongbet
             return response.IsSuccess;
         }
 
-        // [REMOVED] 불필요한 WebSocket 생성 로직 제거, TradingManager로 책임 이동
-        // public async Task<List<SearchedStock>> GetConditionSearchResultAsync(...) { ... }
 
         private async Task<(bool IsSuccess, JObject JsonData, string ContYn, string NextKey)> SendHttpRequestAsync(AccountInfo account, string apiId, string endpoint, object requestBody, string contYn = "N", string nextKey = "")
         {
@@ -262,14 +265,15 @@ namespace All_New_Jongbet
 
             try
             {
-                Logger.Instance.Add($"[TR 요청 시작] {apiId} - 계좌: {account.AccountNumber}");
-                if (App.IsDebugMode) Logger.Instance.Add($" -> Request Body: {jsonBody}");
+                // Logger.Instance.Add($"[TR 요청 시작] {apiId} - 계좌: {account.AccountNumber}");
+                // if (App.IsDebugMode) Logger.Instance.Add($" -> Request Body: {jsonBody}");
 
                 var response = await httpClient.SendAsync(requestMessage);
                 var responseString = await response.Content.ReadAsStringAsync();
                 dynamic result = JsonConvert.DeserializeObject(responseString);
                 if (response.IsSuccessStatusCode && result.return_code.ToString() == "0")
                 {
+                    //Logger.Instance.Add($"결과 : {result}");
                     string cont = response.Headers.TryGetValues("cont-yn", out var c) ? c.FirstOrDefault() : "N";
                     string next = response.Headers.TryGetValues("next-key", out var n) ? n.FirstOrDefault() : "";
                     return (true, result, cont, next);
@@ -337,13 +341,73 @@ namespace All_New_Jongbet
 
         public async Task<List<DailyChartData>> GetDailyChartAsync(AccountInfo account, string stockCode, string startDate)
         {
-            var requestBody = new { sch_gb = "D", st_dt = startDate, ed_dt = DateTime.Today.ToString("yyyyMMdd"), stk_cd = stockCode };
+            //var requestBody = new { sch_gb = "D", st_dt = startDate, ed_dt = DateTime.Today.ToString("yyyyMMdd"), stk_cd = stockCode };
+            var requestBody = new { base_dt = startDate, stk_cd = stockCode, upd_stkpc_tp = "1" };
             var response = await SendHttpRequestAsync(account, "ka10081", "/api/dostk/chart", requestBody);
-            if (response.IsSuccess && response.JsonData?["chart_data"] is JArray chartArray)
+            if (response.IsSuccess && response.JsonData?["stk_dt_pole_chart_qry"] is JArray chartArray)
             {
                 return chartArray.ToObject<List<DailyChartData>>();
             }
             return null;
+        }
+
+        public async Task<List<SearchedStock>> GetMultiStockInfoAsync(AccountInfo account, List<string> stockCodes)
+        {
+            var results = new List<SearchedStock>();
+            
+            // 최대 100개 단위로 청크 분할
+            for (int i = 0; i < stockCodes.Count; i += 100)
+            {
+                var chunk = stockCodes.Skip(i).Take(100).ToList();
+                string joinedCodes = string.Join("|", chunk);
+                var requestBody = new { stk_cd = joinedCodes };
+                
+                var response = await SendHttpRequestAsync(account, "ka10095", "/api/dostk/stkinfo", requestBody);
+                if (response.IsSuccess && response.JsonData?["atn_stk_infr"] is JArray infoArray)
+                {
+                    foreach (var item in infoArray)
+                    {
+                        try
+                        {
+                            string code = item["stk_cd"]?.ToString();
+                            string name = item["stk_nm"]?.ToString();
+                            if (string.IsNullOrEmpty(code)) continue;
+
+                            var stock = new SearchedStock(code, name)
+                            {
+                                CurrentPrice = Math.Abs(Convert.ToDouble(item["cur_prc"] ?? "0")),
+                                PreviousClosePrice = Math.Abs(Convert.ToDouble(item["base_pric"] ?? "0")),
+                                Volume = Convert.ToInt64(item["trde_qty"] ?? "0"),
+                                TradingAmount = Convert.ToInt64(item["trde_prica"] ?? "0"),
+                                MarketCap = Convert.ToInt64(item["mac"] ?? "0")
+                            };
+
+                            stock.DailyChart.Add(new DailyChartData
+                            {
+                                Date = DateTime.Today.ToString("yyyyMMdd"),
+                                OpenPrice = Math.Abs(Convert.ToDouble(item["open_pric"] ?? "0")),
+                                HighPrice = Math.Abs(Convert.ToDouble(item["high_pric"] ?? "0")),
+                                LowPrice = Math.Abs(Convert.ToDouble(item["low_pric"] ?? "0")),
+                                ClosePrice = Math.Abs(Convert.ToDouble(item["cur_prc"] ?? "0")),
+                                Volume = Convert.ToInt64(item["trde_qty"] ?? "0"),
+                                TradingAmount = Convert.ToInt64(item["trde_prica"] ?? "0")
+                            });
+
+                            results.Add(stock);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Instance.Add($"[TR 파싱 오류] ka10095 종목 파싱 실패: {ex.Message}");
+                        }
+                    }
+                }
+                
+                // API 호출 제한 방지 딜레이
+                if (i + 100 < stockCodes.Count)
+                    await Task.Delay(300);
+            }
+            
+            return results;
         }
     }
 }

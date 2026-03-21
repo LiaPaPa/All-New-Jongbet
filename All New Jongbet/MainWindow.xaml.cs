@@ -1,4 +1,4 @@
-﻿// MainWindow.xaml.cs file
+// MainWindow.xaml.cs file
 
 using Newtonsoft.Json.Linq;
 using System;
@@ -39,9 +39,11 @@ namespace All_New_Jongbet
 
         private readonly Dictionary<string, KiwoomRealtimeClient> _realtimeClients = new Dictionary<string, KiwoomRealtimeClient>();
         private readonly ConcurrentDictionary<string, TaskCompletionSource<JObject>> _wsResponseTasks = new ConcurrentDictionary<string, TaskCompletionSource<JObject>>();
+        private readonly HashSet<string> _registeredStockGroups = new HashSet<string>(); // 등록된 실시간 시세 그룹 추적
 
         private ApiRequestScheduler _apiRequestScheduler;
         private TradingManager _tradingManager;
+        public MarketTimeTracker MarketTimeTracker { get; private set; }
         private CancellationTokenSource _appCts = new CancellationTokenSource();
 
         private readonly ConcurrentQueue<Notification> _orderNotificationQueue;
@@ -61,6 +63,22 @@ namespace All_New_Jongbet
             }
         }
 
+        private bool _isTestMode;
+        public bool IsTestMode
+        {
+            get => _isTestMode;
+            set
+            {
+                _isTestMode = value;
+                OnPropertyChanged(nameof(IsTestMode));
+                if (_tradingManager != null)
+                {
+                    _tradingManager.IsTestMode = value;
+                }
+                UpdateStatus(value ? "TEST MODE ACTIVATED" : "Test Mode Deactivated", "StatusLabel");
+            }
+        }
+
         private Timer _notificationTimer;
         private bool _isNotificationSentToday = false;
         private readonly TelegramApiService _telegramService;
@@ -76,6 +94,7 @@ namespace All_New_Jongbet
             _chartGenerator = new ChartGenerator();
 
             _apiService = new KiwoomApiService();
+            MarketTimeTracker = new MarketTimeTracker();
             _orderNotificationQueue = new ConcurrentQueue<Notification>();
 
             AccountManageList = new ObservableCollection<AccountInfo>();
@@ -88,6 +107,7 @@ namespace All_New_Jongbet
             DisplayedNotifications.Add(_statusNotification);
 
             LoadStrategies();
+            MaxPriceRepository.Load(); // [NEW] 매수 최고가 로컬 데이터 로딩
 
             _dashboardPage = new DashboardPage(AccountManageList, OrderQueList);
             _tradeSetupPage = new TradeSetupPage(this, StrategyList);
@@ -108,6 +128,7 @@ namespace All_New_Jongbet
 
                 // [MODIFIED] TradingManager 생성 시 this (MainWindow 인스턴스) 전달
                 _tradingManager = new TradingManager(this, _apiService, StrategyList, AccountManageList, _apiRequestScheduler, SendWsRequestAsync);
+                _tradingManager.IsTestMode = IsTestMode; // Initialize with current state
 
                 await FetchAllConditionListsAsync();
                 await FetchAllAccountBalancesAsync();
@@ -151,18 +172,31 @@ namespace All_New_Jongbet
 
                 UpdateStatus($"Connecting WebSocket for AppKey {account.AppKey.Substring(0, 8)}...", "RequestingStatusLabel");
 
-                var wsClient = new KiwoomRealtimeClient(account.Token);
+                var wsClient = new KiwoomRealtimeClient(account.Token, this);
 
                 wsClient.OnReceiveData += (data) =>
                 {
                     string trnm = data["trnm"]?.ToString();
+                    //Logger.Instance.Add($"[MainWindow Event] Received trnm: {trnm}"); // Debug Log
                     if (trnm == "REAL")
                     {
                         HandleRealtimeData(account, data);
                     }
-                    else if (trnm != null && _wsResponseTasks.TryRemove(trnm, out var tcs))
+                    else if (trnm != null)
                     {
-                        tcs.TrySetResult(data);
+                        if (_wsResponseTasks.ContainsKey(trnm))
+                        {
+                            // Logger.Instance.Add($"[MainWindow Event] Found waiting task for {trnm}");
+                            if (_wsResponseTasks.TryRemove(trnm, out var tcs))
+                            {
+                                tcs.TrySetResult(data);
+                                // Logger.Instance.Add($"[MainWindow Event] Task completed for {trnm}");
+                            }
+                        }
+                        else
+                        {
+                            // Logger.Instance.Add($"[MainWindow Event] No waiting task for {trnm}");
+                        }
                     }
                 };
 
@@ -171,6 +205,7 @@ namespace All_New_Jongbet
                 {
                     _realtimeClients[account.AppKey] = wsClient;
                     Logger.Instance.Add($"AppKey {account.AppKey.Substring(0, 8)}... 에 대한 웹소켓 연결 성공.");
+                    await Task.Delay(1500); // [NEW] 로그인 인증 대기 시간 추가
                 }
             }
         }
@@ -190,6 +225,13 @@ namespace All_New_Jongbet
                     await wsClient.RegisterRealtimeAsync($"{i:D2}02", new[] { "" }, new[] { "04" }); // 잔고
                     await Task.Delay(250);
 
+                    // 첫 번째 계좌에서만 장시작시간(type 0s) 구독
+                    if (i == 0)
+                    {
+                        await wsClient.RegisterRealtimeAsync("MARKET_TIME", new[] { "" }, new[] { "0s" }); // 장시작시간
+                        await Task.Delay(250);
+                    }
+
                     await UpdateStockSubscriptionAsync(account); // 보유 종목 구독
                 }
             }
@@ -203,20 +245,34 @@ namespace All_New_Jongbet
             if (_realtimeClients.TryGetValue(account.AppKey, out var wsClient))
             {
                 var stockCodes = account.HoldingStockList?.Select(s => s.StockCode.TrimStart('A')).ToArray() ?? new string[0];
+                string groupId03 = $"{accountIndex:D2}03";
+                string groupId04 = $"{accountIndex:D2}04";
 
                 if (stockCodes.Any())
                 {
                     Logger.Instance.Add($"[{account.AccountNumber}] 보유 종목 변경으로 실시간 시세를 재구독합니다. (대상: {stockCodes.Length}개)");
-                    await wsClient.RegisterRealtimeAsync($"{accountIndex:D2}03", stockCodes, new[] { "0B" }, "0");
+                    await wsClient.RegisterRealtimeAsync(groupId03, stockCodes, new[] { "0B" }, "0");
                     await Task.Delay(250);
-                    await wsClient.RegisterRealtimeAsync($"{accountIndex:D2}04", stockCodes, new[] { "0C" }, "0");
+                    await wsClient.RegisterRealtimeAsync(groupId04, stockCodes, new[] { "0C" }, "0");
+
+                    // 등록 완료 추적
+                    _registeredStockGroups.Add(groupId03);
+                    _registeredStockGroups.Add(groupId04);
                 }
                 else
                 {
-                    Logger.Instance.Add($"[{account.AccountNumber}] 보유 종목이 없어 실시간 시세 구독을 해지합니다.");
-                    await wsClient.UnregisterRealtimeAsync($"{accountIndex:D2}03");
-                    await Task.Delay(250);
-                    await wsClient.UnregisterRealtimeAsync($"{accountIndex:D2}04");
+                    // 등록된 상태일 때만 해지 요청
+                    if (_registeredStockGroups.Contains(groupId03) || _registeredStockGroups.Contains(groupId04))
+                    {
+                        Logger.Instance.Add($"[{account.AccountNumber}] 보유 종목이 없어 실시간 시세 구독을 해지합니다.");
+                        await wsClient.UnregisterRealtimeAsync(groupId03);
+                        await Task.Delay(250);
+                        await wsClient.UnregisterRealtimeAsync(groupId04);
+
+                        // 해지 완료 추적
+                        _registeredStockGroups.Remove(groupId03);
+                        _registeredStockGroups.Remove(groupId04);
+                    }
                 }
             }
         }
@@ -304,6 +360,20 @@ namespace All_New_Jongbet
                 _statusNotification.Message = message;
                 _statusNotification.StyleKey = styleKey;
             });
+        }
+
+        private void TestModeButton_Checked(object sender, RoutedEventArgs e)
+        {
+            IsTestMode = true;
+            Logger.Instance.Add("===== [TEST MODE] 활성화됨 =====");
+            Logger.Instance.Add("이제부터 모든 주문은 수량 0으로 전송됩니다.");
+        }
+
+        private void TestModeButton_Unchecked(object sender, RoutedEventArgs e)
+        {
+            IsTestMode = false;
+            Logger.Instance.Add("===== [TEST MODE] 비활성화됨 =====");
+            Logger.Instance.Add("이제부터 정상적인 주문이 전송됩니다.");
         }
 
         private async Task ProcessNotificationQueueAsync()
@@ -421,6 +491,7 @@ namespace All_New_Jongbet
         {
             var tcs = new TaskCompletionSource<JObject>();
             _wsResponseTasks.TryAdd(trnm, tcs);
+            // Logger.Instance.Add($"[SendWsRequestAsync] Added task for {trnm}"); // Debug Log
 
             try
             {
@@ -458,7 +529,7 @@ namespace All_New_Jongbet
         {
             Logger.Instance.Add("모든 계좌의 일별 자산 현황 조회를 시작합니다.");
             string today = DateTime.Today.ToString("yyyyMMdd");
-            string startDate = DateTime.Today.AddMonths(-6).ToString("yyyyMMdd");
+            string startDate = DateTime.Today.AddMonths(-3).ToString("yyyyMMdd");
             foreach (var account in AccountManageList.Where(acc => acc.TokenStatus == "Success"))
             {
                 UpdateStatus($"Fetching Daily Assets for {account.AccountNumber}...", "RequestingStatusLabel");
@@ -489,16 +560,17 @@ namespace All_New_Jongbet
 
         public async Task FetchAllOrderHistoriesAsync()
         {
-            var strategyAccountNumbers = StrategyList.Select(s => s.AccountNumber).Distinct().ToList();
-            if (!strategyAccountNumbers.Any())
+            var accountsToQuery = AccountManageList.Where(acc => acc.TokenStatus == "Success").ToList();
+            if (!accountsToQuery.Any())
             {
-                Logger.Instance.Add("조회할 전략이 등록된 계좌가 없어 주문/체결 내역 조회를 건너뜁니다.");
+                Logger.Instance.Add("토큰 발급이 성공한 계좌가 없어 주문/체결 내역 조회를 건너뜁니다.");
                 return;
             }
-            Logger.Instance.Add($"전략에 등록된 계좌({string.Join(", ", strategyAccountNumbers)})의 주문/체결/미체결 내역 조회를 시작합니다.");
+
+            var accountNumbers = string.Join(", ", accountsToQuery.Select(a => a.AccountNumber));
+            Logger.Instance.Add($"계좌({accountNumbers})의 주문/체결/미체결 내역 조회를 시작합니다.");
             AllOrderHistoryList.Clear();
             OrderQueList.Clear();
-            var accountsToQuery = AccountManageList.Where(acc => acc.TokenStatus == "Success" && strategyAccountNumbers.Contains(acc.AccountNumber));
 
             foreach (var account in accountsToQuery)
             {
@@ -552,28 +624,51 @@ namespace All_New_Jongbet
         // [MODIFIED] 실시간 데이터 처리 로직 개선
         private void HandleRealtimeData(AccountInfo account, JObject data)
         {
-            string type = data["type"]?.ToString();
-            if (!string.IsNullOrEmpty(type)) // 주식체결(0B), 주식우선호가(0C)
+            // Check if data is an array (new format)
+            if (data["data"] is JArray dataArray)
             {
-                string stockCode = data["stk_cd"]?.ToString()?.TrimStart('A');
-                if (data["data"] is JObject values)
+                foreach (var item in dataArray)
                 {
-                    if (type == "0B") HandleStockExecution(stockCode, values);
-                    if (type == "0C") HandlePriorityQuote(stockCode, values);
+                    if (item is JObject itemObj)
+                    {
+                        string dataType = itemObj["type"]?.ToString();
+
+                        // 주식체결(0B), 주식우선호가(0C)
+                        if (dataType == "0B" || dataType == "0C")
+                        {
+                            string stockCode = itemObj["item"]?.ToString()?.TrimStart('A');
+                            if (itemObj["values"] is JObject values)
+                            {
+                                if (dataType == "0B") HandleStockExecution(stockCode, values);
+                                if (dataType == "0C") HandlePriorityQuote(stockCode, values);
+                            }
+                        }
+                        // 주문체결(00), 잔고(04)
+                        else if (dataType == "00" || dataType == "04")
+                        {
+                            if (itemObj["values"] is JObject values)
+                            {
+                                switch (dataType)
+                                {
+                                    case "00": HandleOrderExecution(account, values); break;
+                                    case "04": HandleBalanceUpdate(account, values); break;
+                                }
+                            }
+                        }
+                    }
                 }
             }
-            else if (data["data"] is JArray dataArray) // 주문체결(00), 잔고(04)
+            // Old format (fallback for compatibility)
+            else
             {
-                foreach (JObject item in dataArray)
+                string type = data["type"]?.ToString();
+                if (!string.IsNullOrEmpty(type))
                 {
-                    string dataType = item["type"]?.ToString();
-                    if (item["values"] is JObject values)
+                    string stockCode = data["stk_cd"]?.ToString()?.TrimStart('A');
+                    if (data["data"] is JObject values)
                     {
-                        switch (dataType)
-                        {
-                            case "00": HandleOrderExecution(account, values); break;
-                            case "04": HandleBalanceUpdate(account, values); break;
-                        }
+                        if (type == "0B") HandleStockExecution(stockCode, values);
+                        if (type == "0C") HandlePriorityQuote(stockCode, values);
                     }
                 }
             }

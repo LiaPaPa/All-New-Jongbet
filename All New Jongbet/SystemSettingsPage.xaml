@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="All_New_Jongbet.SystemSettingsPage"
+<UserControl x:Class="All_New_Jongbet.SystemSettingsPage"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -45,7 +45,10 @@
 
                     <Border Grid.Column="1" Style="{StaticResource KPICard}" Margin="10,0,0,0">
                         <StackPanel>
-                            <TextBlock Text="Manage Conditions" Style="{StaticResource CardTitle}" FontSize="16" Foreground="{StaticResource PrimaryText}"/>
+                            <Grid Margin="0,0,0,10">
+                                <TextBlock Text="Manage Conditions" Style="{StaticResource CardTitle}" FontSize="16" Foreground="{StaticResource PrimaryText}" VerticalAlignment="Center"/>
+                                <Button x:Name="TestConditionSearchButton" Content="검색 테스트" Style="{StaticResource SecondaryActionButton}" HorizontalAlignment="Right" Click="TestConditionSearch_Click" IsEnabled="False"/>
+                            </Grid>
                             <DataGrid x:Name="ConditionsDataGrid" Height="156" SelectionMode="Single" Margin="0,10,0,0" SelectionChanged="DataGrid_SelectionChanged">
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="No" Binding="{Binding Index}" Width="50"/>

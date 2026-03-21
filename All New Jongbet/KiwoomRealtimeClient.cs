@@ -1,4 +1,4 @@
-﻿// KiwoomRealtimeClient.cs 파일 전체를 아래 코드로 교체하세요.
+// KiwoomRealtimeClient.cs 파일 전체를 아래 코드로 교체하세요.
 
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -18,6 +18,7 @@ namespace All_New_Jongbet
         private readonly ClientWebSocket _ws;
         public ClientWebSocket WebSocket => _ws;
         private readonly string _accessToken;
+        private readonly MainWindow _mainWindow;
         private CancellationTokenSource _cts;
         private const string WebSocketUrl = "wss://api.kiwoom.com:10000/api/dostk/websocket";
 
@@ -27,9 +28,10 @@ namespace All_New_Jongbet
 
         public event Action<JObject> OnReceiveData;
 
-        public KiwoomRealtimeClient(string accessToken)
+        public KiwoomRealtimeClient(string accessToken, MainWindow mainWindow)
         {
             _accessToken = accessToken;
+            _mainWindow = mainWindow;
             _ws = new ClientWebSocket();
         }
 
@@ -71,7 +73,7 @@ namespace All_New_Jongbet
                 _lastRequestDetails = Tuple.Create(description, groupNumber, itemLog);
             }
 
-            Logger.Instance.Add($"[{description}] 실시간 등록 요청 (grp_no={groupNumber}, items={itemLog}, refresh={refresh})");
+            // Logger.Instance.Add($"[{description}] 실시간 등록 요청 (grp_no={groupNumber}, items={itemLog}, refresh={refresh})");
 
             return SendMessageAsync(regPacket);
         }
@@ -84,7 +86,7 @@ namespace All_New_Jongbet
                 trnm = "REMOVE",
                 grp_no = groupNumber
             };
-            Logger.Instance.Add($"[실시간 해지 요청] (grp_no={groupNumber})");
+            // Logger.Instance.Add($"[실시간 해지 요청] (grp_no={groupNumber})");
             return SendMessageAsync(unregPacket);
         }
 
@@ -97,6 +99,7 @@ namespace All_New_Jongbet
                 case "0B": return "주식체결";
                 case "0C": return "주식우선호가";
                 case "0D": return "주식호가잔량";
+                case "0s": return "장시작시간";
                 default: return "기타 실시간 항목";
             }
         }
@@ -121,12 +124,6 @@ namespace All_New_Jongbet
                         {
                             var responseString = Encoding.UTF8.GetString(ms.ToArray());
 
-                            // [DEBUGGING CODE] 실시간 데이터 수신 여부 확인을 위한 로그 추가
-                            //if (responseString.Contains("\"trnm\":\"REAL\""))
-                            //{
-                            //    Logger.Instance.Add($"[실시간 데이터 수신] {responseString}");
-                            //}
-
                             var response = JObject.Parse(responseString);
                             string trnm = response["trnm"]?.ToString();
 
@@ -139,7 +136,9 @@ namespace All_New_Jongbet
                                 if (trnm == "LOGIN")
                                 {
                                     if (response["return_code"]?.ToString() == "0")
-                                        Logger.Instance.Add("[WebSocket 수신] 실시간 서버 로그인 성공");
+                                    {
+                                        // Logger.Instance.Add("[WebSocket 수신] 실시간 서버 로그인 성공");
+                                    }
                                     else
                                         Logger.Instance.Add($"[WebSocket 수신] 실시간 서버 로그인 실패: {response["return_msg"]}");
                                 }
@@ -159,11 +158,11 @@ namespace All_New_Jongbet
                                             string description = requestDetails.Item1;
                                             string grpNo = requestDetails.Item2;
                                             string itemsLog = requestDetails.Item3;
-                                            Logger.Instance.Add($"[{description}] 실시간 등록 성공!! (grp_no={grpNo}, items={itemsLog})");
+                                            // Logger.Instance.Add($"[{description}] 실시간 등록 성공!! (grp_no={grpNo}, items={itemsLog})");
                                         }
                                         else
                                         {
-                                            Logger.Instance.Add("[실시간 항목] 실시간 등록 성공!!"); // 비상시 대체 로그
+                                            // Logger.Instance.Add("[실시간 항목] 실시간 등록 성공!!"); // 비상시 대체 로그
                                         }
                                     }
                                     else
@@ -171,9 +170,29 @@ namespace All_New_Jongbet
                                         Logger.Instance.Add($"[WebSocket 수신] 실시간 항목 등록 실패: {response["return_msg"]}");
                                     }
                                 }
+                                else if (trnm == "REAL")
+                                {
+                                    // 실시간 데이터 처리
+                                    var dataArray = response["data"] as JArray;
+                                    if (dataArray != null)
+                                    {
+                                        foreach (var item in dataArray)
+                                        {
+                                            string type = item["type"]?.ToString();
+                                            if (type == "0s")  // 장시작시간
+                                            {
+                                                var values = item["values"] as JObject;
+                                                if (values != null)
+                                                {
+                                                    _mainWindow?.MarketTimeTracker?.ProcessMarketTimeData(values);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                                 else if (App.IsDebugMode && !responseString.Contains("\"trnm\":\"REAL\"")) // 디버그 모드이고, 실시간 데이터가 아닐 때만 전체 로그 출력
                                 {
-                                    Logger.Instance.Add($"[WebSocket 수신] {responseString}");
+                                    // Logger.Instance.Add($"[WebSocket 수신] {responseString}");
                                 }
 
                                 OnReceiveData?.Invoke(response);

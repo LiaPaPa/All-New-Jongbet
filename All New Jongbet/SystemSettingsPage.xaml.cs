@@ -1,4 +1,4 @@
-﻿// SystemSettingsPage.xaml.cs 파일 전체를 아래 코드로 교체하세요.
+// SystemSettingsPage.xaml.cs 파일 전체를 아래 코드로 교체하세요.
 
 using Microsoft.Win32;
 using Newtonsoft.Json;
@@ -154,11 +154,76 @@ namespace All_New_Jongbet
             AddStrategyButton.IsEnabled = AccountsDataGrid.SelectedItem != null && ConditionsDataGrid.SelectedItem != null;
             SaveStrategyButton.IsEnabled = StrategyList.Any(s => s.Status == "Inactive");
             DeleteStrategyButton.IsEnabled = StrategyMatchingDataGrid.SelectedItem != null;
+            
+            if (TestConditionSearchButton != null)
+            {
+                TestConditionSearchButton.IsEnabled = AccountsDataGrid.SelectedItem != null && ConditionsDataGrid.SelectedItem != null;
+            }
         }
 
         private void RunTest_Click(object sender, RoutedEventArgs e)
         {
             // _mainWindow?.RunRateLimitTestAsync();
+        }
+
+        private async void TestConditionSearch_Click(object sender, RoutedEventArgs e)
+        {
+            if (AccountsDataGrid.SelectedItem is AccountInfo selectedAccount &&
+                ConditionsDataGrid.SelectedItem is ConditionInfo selectedCondition)
+            {
+                var ws = _mainWindow?.GetWebSocketByAppKey(selectedAccount.AppKey);
+                if (ws == null)
+                {
+                    MessageBox.Show("해당 계좌의 웹소켓이 연결되어 있지 않습니다.", "오류", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                try
+                {
+                    TestConditionSearchButton.IsEnabled = false;
+                    TestConditionSearchButton.Content = "검색 중...";
+
+                    var requestPacket = new { trnm = "CNSRREQ", seq = selectedCondition.Index, search_type = "0", stex_tp = "K", cont_yn = "N", next_key = "" };
+                    var response = await _mainWindow.SendWsRequestAsync(ws, "CNSRREQ", requestPacket);
+
+                    if (response?["return_code"]?.ToString() == "0")
+                    {
+                        var stocks = new List<string>();
+                        if (response["data"] is Newtonsoft.Json.Linq.JArray dataArray)
+                        {
+                            foreach (var item in dataArray.OfType<Newtonsoft.Json.Linq.JObject>())
+                            {
+                                string stockCode = item["9001"]?.ToString().TrimStart('A');
+                                string stockName = item["302"]?.ToString();
+                                stocks.Add($"- [{stockCode}] {stockName}");
+                            }
+                        }
+
+                        string message = stocks.Any()
+                            ? $"조건검색식 '{selectedCondition.Name}' 결과 ({stocks.Count}개 종목):\n\n{string.Join("\n", stocks)}"
+                            : $"조건검색식 '{selectedCondition.Name}' 결과:\n포착된 종목이 없습니다.";
+
+                        MessageBox.Show(message, "조건검색 테스트 결과", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                    else
+                    {
+                        MessageBox.Show($"조건검색 요청 중 서버 오류가 발생했습니다.\n{response?["return_msg"]}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
+                }
+                catch (TimeoutException)
+                {
+                    MessageBox.Show("조건검색 요청 응답 시간이 초과되었습니다. (키움 API가 결과가 없을 때 응답하지 않는 현상일 수 있습니다.)", "시간 초과", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"조건검색 테스트 중 예기치 않은 오류가 발생했습니다:\n{ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                finally
+                {
+                    TestConditionSearchButton.IsEnabled = true;
+                    TestConditionSearchButton.Content = "검색 테스트";
+                }
+            }
         }
     }
 }

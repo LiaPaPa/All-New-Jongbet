@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="All_New_Jongbet.TradeSetupPage"
+<UserControl x:Class="All_New_Jongbet.TradeSetupPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
@@ -20,12 +20,12 @@
         </StackPanel>
 
         <Grid Grid.Row="1" Margin="40,0,40,20">
-            <Grid.ColumnDefinitions>
+            <!--<Grid.ColumnDefinitions>
                 <ColumnDefinition Width="3.5*"/>
                 <ColumnDefinition Width="6.5*"/>
-            </Grid.ColumnDefinitions>
+            </Grid.ColumnDefinitions>-->
 
-            <Border Grid.Column="0" Style="{StaticResource KPICard}" Margin="0,0,10,0">
+            <!--<Border Grid.Column="0" Style="{StaticResource KPICard}" Margin="0,0,10,0">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -40,10 +40,28 @@
                         </DataGrid.Columns>
                     </DataGrid>
                 </Grid>
-            </Border>
+            </Border>-->
 
-            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="10,0,0,0">
+            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="10,0,0,0" PreviewMouseWheel="ScrollViewer_PreviewMouseWheel">
                 <StackPanel DataContext="{Binding SelectedTradeSettings}">
+                    
+                    <Border Style="{StaticResource KPICard}" Margin="0,0,0,20">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Text="Strategy List" Style="{StaticResource CardTitle}" FontSize="16" Foreground="{StaticResource PrimaryText}"/>
+                            <DataGrid Grid.Row="1" x:Name="StrategyListDataGrid" ItemsSource="{Binding ActiveStrategyListView}" SelectionMode="Single" SelectionChanged="StrategyListDataGrid_SelectionChanged" Margin="0,10,0,0" MaxHeight="300" EnableRowVirtualization="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="No" Binding="{Binding StrategyNumber}" Width="50" CellStyle="{StaticResource CenterAlignedCellStyle}"/>
+                                    <DataGridTextColumn Header="Account" Binding="{Binding AccountNumber}" Width="*"/>
+                                    <DataGridTextColumn Header="Condition" Binding="{Binding ConditionName}" Width="1.5*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </Border>
+                    
                     <Border Style="{StaticResource KPICard}" Margin="0,0,0,20">
                         <StackPanel>
                             <Grid Margin="0,0,0,10">
@@ -83,21 +101,35 @@
 
                                 <StackPanel Grid.Row="2" Grid.Column="0" Style="{StaticResource SettingLabelStyleL1}">
                                     <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="{StaticResource AccentPurple}"/>
-                                    <TextBlock Text="매수 시작시간" Foreground="{StaticResource SecondaryText}"/>
+                                    <TextBlock Text="매수 시작" Foreground="{StaticResource SecondaryText}"/>
                                 </StackPanel>
-                                <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Margin="10,3">
-                                    <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Buy.BuyStartHour, StringFormat=D2}" Width="35" MaxLength="2"/>
-                                    <TextBlock Text=":" VerticalAlignment="Center" Margin="5,0"/>
-                                    <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Buy.BuyStartMinute, StringFormat=D2}" Width="35" MaxLength="2"/>
-                                    <TextBlock Text=":" VerticalAlignment="Center" Margin="5,0"/>
-                                    <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Buy.BuyStartSecond, StringFormat=D2}" Width="35" MaxLength="2"/>
+                                <StackPanel Grid.Row="2" Grid.Column="1" Margin="10,3">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                        <RadioButton Content="절대시간" IsChecked="{Binding Buy.IsBuyStartAbsoluteTime}" GroupName="BuyStartTime" Margin="0,0,20,0" Foreground="{StaticResource PrimaryText}"/>
+                                        <RadioButton Content="상대시간" IsChecked="{Binding Buy.IsBuyStartRelativeTime}" GroupName="BuyStartTime" Foreground="{StaticResource PrimaryText}"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" IsEnabled="{Binding Buy.IsBuyStartAbsoluteTime}" Margin="0,0,0,5">
+                                        <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Buy.BuyStartHour, StringFormat=D2}" Width="35" MaxLength="2"/>
+                                        <TextBlock Text=":" VerticalAlignment="Center" Margin="5,0"/>
+                                        <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Buy.BuyStartMinute, StringFormat=D2}" Width="35" MaxLength="2"/>
+                                        <TextBlock Text=":" VerticalAlignment="Center" Margin="5,0"/>
+                                        <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Buy.BuyStartSecond, StringFormat=D2}" Width="35" MaxLength="2"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" IsEnabled="{Binding Buy.IsBuyStartRelativeTime}">
+                                        <ComboBox SelectedValue="{Binding Buy.BuyStartRelativeBase}" SelectedValuePath="Content" Width="80" Style="{StaticResource SettingComboBoxStyle}">
+                                            <ComboBoxItem Content="장시작"/>
+                                            <ComboBoxItem Content="장종료"/>
+                                        </ComboBox>
+                                        <TextBox Text="{Binding Buy.BuyStartRelativeOffsetMinutes}" Width="50" Margin="10,0" Style="{StaticResource SettingTextBoxStyle}"/>
+                                        <TextBlock Text="분" VerticalAlignment="Center" Margin="5,0"/>
+                                    </StackPanel>
                                 </StackPanel>
 
-                                <StackPanel Grid.Row="2" Grid.Column="2" Style="{StaticResource SettingLabelStyleL1}" Margin="20,3,10,3">
+                                <StackPanel Grid.Row="1" Grid.Column="2" Style="{StaticResource SettingLabelStyleL1}" Margin="20,3,10,3">
                                     <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="{StaticResource AccentPurple}"/>
                                     <TextBlock Text="매수 비중" Foreground="{StaticResource SecondaryText}"/>
                                 </StackPanel>
-                                <TextBox Grid.Row="2" Grid.Column="3" Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Buy.BuyWeight}" Margin="0,3"/>
+                                <TextBox Grid.Row="1" Grid.Column="3" Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Buy.BuyWeight}" Margin="0,3"/>
 
                                 <StackPanel Grid.Row="3" Grid.Column="0" Style="{StaticResource SettingLabelStyleL1}">
                                     <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="{StaticResource AccentPurple}"/>
@@ -153,25 +185,53 @@
 
                                 <StackPanel Grid.Row="2" Grid.Column="0" Style="{StaticResource SettingLabelStyleL1}">
                                     <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="{StaticResource AccentPurple}"/>
-                                    <TextBlock Text="매도 시작시간" Foreground="{StaticResource SecondaryText}"/>
+                                    <TextBlock Text="매도 시작" Foreground="{StaticResource SecondaryText}"/>
                                 </StackPanel>
-                                <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Margin="10,3">
-                                    <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.SellStartHour, StringFormat=D2}" Width="35" MaxLength="2"/>
-                                    <TextBlock Text=":" VerticalAlignment="Center" Margin="5,0"/>
-                                    <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.SellStartMinute, StringFormat=D2}" Width="35" MaxLength="2"/>
-                                    <TextBlock Text=":" VerticalAlignment="Center" Margin="5,0"/>
-                                    <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.SellStartSecond, StringFormat=D2}" Width="35" MaxLength="2"/>
+                                <StackPanel Grid.Row="2" Grid.Column="1" Margin="10,3">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                        <RadioButton Content="절대시간" IsChecked="{Binding Sell.IsSellStartAbsoluteTime}" GroupName="SellStartTime" Margin="0,0,20,0" Foreground="{StaticResource PrimaryText}"/>
+                                        <RadioButton Content="상대시간" IsChecked="{Binding Sell.IsSellStartRelativeTime}" GroupName="SellStartTime" Foreground="{StaticResource PrimaryText}"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" IsEnabled="{Binding Sell.IsSellStartAbsoluteTime}" Margin="0,0,0,5">
+                                        <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.SellStartHour, StringFormat=D2}" Width="35" MaxLength="2"/>
+                                        <TextBlock Text=":" VerticalAlignment="Center" Margin="5,0"/>
+                                        <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.SellStartMinute, StringFormat=D2}" Width="35" MaxLength="2"/>
+                                        <TextBlock Text=":" VerticalAlignment="Center" Margin="5,0"/>
+                                        <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.SellStartSecond, StringFormat=D2}" Width="35" MaxLength="2"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" IsEnabled="{Binding Sell.IsSellStartRelativeTime}">
+                                        <ComboBox SelectedValue="{Binding Sell.SellStartRelativeBase}" SelectedValuePath="Content" Width="80" Style="{StaticResource SettingComboBoxStyle}">
+                                            <ComboBoxItem Content="장시작"/>
+                                            <ComboBoxItem Content="장종료"/>
+                                        </ComboBox>
+                                        <TextBox Text="{Binding Sell.SellStartRelativeOffsetMinutes}" Width="50" Margin="10,0" Style="{StaticResource SettingTextBoxStyle}"/>
+                                        <TextBlock Text="분" VerticalAlignment="Center" Margin="5,0"/>
+                                    </StackPanel>
                                 </StackPanel>
                                 <StackPanel Grid.Row="2" Grid.Column="2" Style="{StaticResource SettingLabelStyleL1}" Margin="20,3,10,3">
                                     <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="{StaticResource AccentPurple}"/>
-                                    <TextBlock Text="매도 종료시간" Foreground="{StaticResource SecondaryText}"/>
+                                    <TextBlock Text="매도 종료" Foreground="{StaticResource SecondaryText}"/>
                                 </StackPanel>
-                                <StackPanel Grid.Row="2" Grid.Column="3" Orientation="Horizontal" Margin="0,3">
-                                    <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.SellEndHour, StringFormat=D2}" Width="35" MaxLength="2"/>
-                                    <TextBlock Text=":" VerticalAlignment="Center" Margin="5,0"/>
-                                    <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.SellEndMinute, StringFormat=D2}" Width="35" MaxLength="2"/>
-                                    <TextBlock Text=":" VerticalAlignment="Center" Margin="5,0"/>
-                                    <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.SellEndSecond, StringFormat=D2}" Width="35" MaxLength="2"/>
+                                <StackPanel Grid.Row="2" Grid.Column="3" Margin="0,3">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                        <RadioButton Content="절대시간" IsChecked="{Binding Sell.IsSellEndAbsoluteTime}" GroupName="SellEndTime" Margin="0,0,20,0" Foreground="{StaticResource PrimaryText}"/>
+                                        <RadioButton Content="상대시간" IsChecked="{Binding Sell.IsSellEndRelativeTime}" GroupName="SellEndTime" Foreground="{StaticResource PrimaryText}"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" IsEnabled="{Binding Sell.IsSellEndAbsoluteTime}" Margin="0,0,0,5">
+                                        <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.SellEndHour, StringFormat=D2}" Width="35" MaxLength="2"/>
+                                        <TextBlock Text=":" VerticalAlignment="Center" Margin="5,0"/>
+                                        <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.SellEndMinute, StringFormat=D2}" Width="35" MaxLength="2"/>
+                                        <TextBlock Text=":" VerticalAlignment="Center" Margin="5,0"/>
+                                        <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.SellEndSecond, StringFormat=D2}" Width="35" MaxLength="2"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" IsEnabled="{Binding Sell.IsSellEndRelativeTime}">
+                                        <ComboBox SelectedValue="{Binding Sell.SellEndRelativeBase}" SelectedValuePath="Content" Width="80" Style="{StaticResource SettingComboBoxStyle}">
+                                            <ComboBoxItem Content="장시작"/>
+                                            <ComboBoxItem Content="장종료"/>
+                                        </ComboBox>
+                                        <TextBox Text="{Binding Sell.SellEndRelativeOffsetMinutes}" Width="50" Margin="10,0" Style="{StaticResource SettingTextBoxStyle}"/>
+                                        <TextBlock Text="분" VerticalAlignment="Center" Margin="5,0"/>
+                                    </StackPanel>
                                 </StackPanel>
 
                                 <StackPanel Grid.Row="3" Grid.Column="0" Style="{StaticResource SettingLabelStyleL1}">
@@ -215,14 +275,28 @@
                                 <ComboBox Grid.Row="7" Grid.Column="1" Style="{StaticResource SettingComboBoxStyle}" ItemsSource="{Binding DataContext.SellOrderTypes, RelativeSource={RelativeSource AncestorType=UserControl}}" SelectedItem="{Binding Sell.LiquidationMethod}" Margin="10,3"/>
                                 <StackPanel Grid.Row="7" Grid.Column="2" Style="{StaticResource SettingLabelStyleL1}" Margin="20,3,10,3">
                                     <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" Foreground="{StaticResource AccentPurple}"/>
-                                    <TextBlock Text="청산시간" Foreground="{StaticResource SecondaryText}"/>
+                                    <TextBlock Text="청산 시간" Foreground="{StaticResource SecondaryText}"/>
                                 </StackPanel>
-                                <StackPanel Grid.Row="7" Grid.Column="3" Orientation="Horizontal" Margin="0,3">
-                                    <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.LiquidationHour, StringFormat=D2}" Width="35" MaxLength="2"/>
-                                    <TextBlock Text=":" VerticalAlignment="Center" Margin="5,0"/>
-                                    <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.LiquidationMinute, StringFormat=D2}" Width="35" MaxLength="2"/>
-                                    <TextBlock Text=":" VerticalAlignment="Center" Margin="5,0"/>
-                                    <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.LiquidationSecond, StringFormat=D2}" Width="35" MaxLength="2"/>
+                                <StackPanel Grid.Row="7" Grid.Column="3" Margin="0,3">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                        <RadioButton Content="절대시간" IsChecked="{Binding Sell.IsLiquidationAbsoluteTime}" GroupName="LiquidationTime" Margin="0,0,20,0" Foreground="{StaticResource PrimaryText}"/>
+                                        <RadioButton Content="상대시간" IsChecked="{Binding Sell.IsLiquidationRelativeTime}" GroupName="LiquidationTime" Foreground="{StaticResource PrimaryText}"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" IsEnabled="{Binding Sell.IsLiquidationAbsoluteTime}" Margin="0,0,0,5">
+                                        <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.LiquidationHour, StringFormat=D2}" Width="35" MaxLength="2"/>
+                                        <TextBlock Text=":" VerticalAlignment="Center" Margin="5,0"/>
+                                        <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.LiquidationMinute, StringFormat=D2}" Width="35" MaxLength="2"/>
+                                        <TextBlock Text=":" VerticalAlignment="Center" Margin="5,0"/>
+                                        <TextBox Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.LiquidationSecond, StringFormat=D2}" Width="35" MaxLength="2"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" IsEnabled="{Binding Sell.IsLiquidationRelativeTime}">
+                                        <ComboBox SelectedValue="{Binding Sell.LiquidationRelativeBase}" SelectedValuePath="Content" Width="80" Style="{StaticResource SettingComboBoxStyle}">
+                                            <ComboBoxItem Content="장시작"/>
+                                            <ComboBoxItem Content="장종료"/>
+                                        </ComboBox>
+                                        <TextBox Text="{Binding Sell.LiquidationRelativeOffsetMinutes}" Width="50" Margin="10,0" Style="{StaticResource SettingTextBoxStyle}"/>
+                                        <TextBlock Text="분" VerticalAlignment="Center" Margin="5,0"/>
+                                    </StackPanel>
                                 </StackPanel>
 
                                 <StackPanel Grid.Row="8" Grid.Column="0" Style="{StaticResource SettingLabelStyleL1}">
@@ -236,7 +310,7 @@
 
                                 <StackPanel Grid.Row="9" Grid.Column="0" Style="{StaticResource SettingLabelStyleL2}">
                                     <TextBlock Text="" FontFamily="Segoe MDL2 Assets" FontSize="8" Margin="0,0,5,0"/>
-                                    <TextBlock Text="최저수익률 기준"/>
+                                    <TextBlock Text="최저수익률"/>
                                 </StackPanel>
                                 <TextBox Grid.Row="9" Grid.Column="1" Style="{StaticResource SettingTextBoxStyle}" Text="{Binding Sell.ReboundCutMinProfitRate}" Margin="10,3"/>
                                 <StackPanel Grid.Row="9" Grid.Column="2" Style="{StaticResource SettingLabelStyleL2}" Margin="20,3,10,3">

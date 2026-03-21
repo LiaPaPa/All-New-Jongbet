@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
 namespace All_New_Jongbet
@@ -10,6 +10,16 @@ namespace All_New_Jongbet
         protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        protected string CleanComboBoxString(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return value;
+            if (value.StartsWith("System.Windows.Controls.ComboBoxItem: "))
+            {
+                return value.Replace("System.Windows.Controls.ComboBoxItem: ", "").Trim();
+            }
+            return value;
         }
     }
 
@@ -28,6 +38,31 @@ namespace All_New_Jongbet
 
         private string _orderType = "현재가";
         public string OrderType { get => _orderType; set { _orderType = value; OnPropertyChanged(); } }
+
+        // 매수 시작시간 모드 설정
+        private string _buyStartTimeMode = "절대시간";
+        public string BuyStartTimeMode
+        {
+            get => _buyStartTimeMode;
+            set { _buyStartTimeMode = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsBuyStartAbsoluteTime)); OnPropertyChanged(nameof(IsBuyStartRelativeTime)); }
+        }
+        public bool IsBuyStartAbsoluteTime
+        {
+            get => _buyStartTimeMode == "절대시간";
+            set { if (value) BuyStartTimeMode = "절대시간"; }
+        }
+        public bool IsBuyStartRelativeTime
+        {
+            get => _buyStartTimeMode == "상대시간";
+            set { if (value) BuyStartTimeMode = "상대시간"; }
+        }
+
+        // 상대 시간 설정
+        private string _buyStartRelativeBase = "장시작";
+        public string BuyStartRelativeBase { get => _buyStartRelativeBase; set { _buyStartRelativeBase = CleanComboBoxString(value); OnPropertyChanged(); } }
+
+        private int _buyStartRelativeOffsetMinutes = 0;
+        public int BuyStartRelativeOffsetMinutes { get => _buyStartRelativeOffsetMinutes; set { _buyStartRelativeOffsetMinutes = value; OnPropertyChanged(); } }
 
         // CHANGED: string에서 int로 변경
         public int BuyStartHour { get; set; } = 9;
@@ -57,10 +92,58 @@ namespace All_New_Jongbet
         private string _orderType = "현재가";
         public string OrderType { get => _orderType; set { _orderType = value; OnPropertyChanged(); } }
 
+        // 매도 시작시간 모드 설정
+        private string _sellStartTimeMode = "절대시간";
+        public string SellStartTimeMode
+        {
+            get => _sellStartTimeMode;
+            set { _sellStartTimeMode = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsSellStartAbsoluteTime)); OnPropertyChanged(nameof(IsSellStartRelativeTime)); }
+        }
+        public bool IsSellStartAbsoluteTime
+        {
+            get => _sellStartTimeMode == "절대시간";
+            set { if (value) SellStartTimeMode = "절대시간"; }
+        }
+        public bool IsSellStartRelativeTime
+        {
+            get => _sellStartTimeMode == "상대시간";
+            set { if (value) SellStartTimeMode = "상대시간"; }
+        }
+
+        private string _sellStartRelativeBase = "장시작";
+        public string SellStartRelativeBase { get => _sellStartRelativeBase; set { _sellStartRelativeBase = CleanComboBoxString(value); OnPropertyChanged(); } }
+
+        private int _sellStartRelativeOffsetMinutes = 0;
+        public int SellStartRelativeOffsetMinutes { get => _sellStartRelativeOffsetMinutes; set { _sellStartRelativeOffsetMinutes = value; OnPropertyChanged(); } }
+
         // CHANGED: string에서 int로 변경
         public int SellStartHour { get; set; } = 9;
         public int SellStartMinute { get; set; } = 0;
         public int SellStartSecond { get; set; } = 0;
+
+        // 매도 종료시간 모드 설정
+        private string _sellEndTimeMode = "절대시간";
+        public string SellEndTimeMode
+        {
+            get => _sellEndTimeMode;
+            set { _sellEndTimeMode = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsSellEndAbsoluteTime)); OnPropertyChanged(nameof(IsSellEndRelativeTime)); }
+        }
+        public bool IsSellEndAbsoluteTime
+        {
+            get => _sellEndTimeMode == "절대시간";
+            set { if (value) SellEndTimeMode = "절대시간"; }
+        }
+        public bool IsSellEndRelativeTime
+        {
+            get => _sellEndTimeMode == "상대시간";
+            set { if (value) SellEndTimeMode = "상대시간"; }
+        }
+
+        private string _sellEndRelativeBase = "장종료";
+        public string SellEndRelativeBase { get => _sellEndRelativeBase; set { _sellEndRelativeBase = CleanComboBoxString(value); OnPropertyChanged(); } }
+
+        private int _sellEndRelativeOffsetMinutes = -10;
+        public int SellEndRelativeOffsetMinutes { get => _sellEndRelativeOffsetMinutes; set { _sellEndRelativeOffsetMinutes = value; OnPropertyChanged(); } }
 
         public int SellEndHour { get; set; } = 15;
         public int SellEndMinute { get; set; } = 20;
@@ -100,6 +183,30 @@ namespace All_New_Jongbet
 
         private string _liquidationMethod = "현재가";
         public string LiquidationMethod { get => _liquidationMethod; set { _liquidationMethod = value; OnPropertyChanged(); } }
+
+        // 청산시간 모드 설정
+        private string _liquidationTimeMode = "절대시간";
+        public string LiquidationTimeMode
+        {
+            get => _liquidationTimeMode;
+            set { _liquidationTimeMode = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsLiquidationAbsoluteTime)); OnPropertyChanged(nameof(IsLiquidationRelativeTime)); }
+        }
+        public bool IsLiquidationAbsoluteTime
+        {
+            get => _liquidationTimeMode == "절대시간";
+            set { if (value) LiquidationTimeMode = "절대시간"; }
+        }
+        public bool IsLiquidationRelativeTime
+        {
+            get => _liquidationTimeMode == "상대시간";
+            set { if (value) LiquidationTimeMode = "상대시간"; }
+        }
+
+        private string _liquidationRelativeBase = "장종료";
+        public string LiquidationRelativeBase { get => _liquidationRelativeBase; set { _liquidationRelativeBase = CleanComboBoxString(value); OnPropertyChanged(); } }
+
+        private int _liquidationRelativeOffsetMinutes = -10;
+        public int LiquidationRelativeOffsetMinutes { get => _liquidationRelativeOffsetMinutes; set { _liquidationRelativeOffsetMinutes = value; OnPropertyChanged(); } }
 
         // CHANGED: string에서 int로 변경
         public int LiquidationHour { get; set; } = 15;

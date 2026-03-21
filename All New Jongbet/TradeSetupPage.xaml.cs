@@ -1,4 +1,4 @@
-﻿// TradeSetupPage.xaml.cs 파일 전체를 아래 코드로 교체하세요.
+// TradeSetupPage.xaml.cs 파일 전체를 아래 코드로 교체하세요.
 
 using Newtonsoft.Json;
 using System;
@@ -128,6 +128,31 @@ namespace All_New_Jongbet
         private void RunOrderTest_Click(object sender, RoutedEventArgs e)
         {
             _mainWindow?.RunOrderTestAsync();
+        }
+
+        private void ScrollViewer_PreviewMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+        {
+            // DataGrid 위에서 스크롤 시 내부 스크롤이 작동하도록 예외 처리 (Virtualization 복원으로 인한 자체 스크롤 필요)
+            DependencyObject dep = e.OriginalSource as DependencyObject;
+            while (dep != null)
+            {
+                if (dep is DataGrid) return;
+                
+                if (dep is System.Windows.Media.Visual || dep is System.Windows.Media.Media3D.Visual3D)
+                {
+                    dep = System.Windows.Media.VisualTreeHelper.GetParent(dep);
+                }
+                else
+                {
+                    dep = LogicalTreeHelper.GetParent(dep);
+                }
+            }
+
+            if (sender is ScrollViewer scv)
+            {
+                scv.ScrollToVerticalOffset(scv.VerticalOffset - (e.Delta * 2));
+                e.Handled = true;
+            }
         }
 
         public event PropertyChangedEventHandler PropertyChanged;

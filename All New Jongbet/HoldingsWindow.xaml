@@ -10,7 +10,10 @@
         WindowStartupLocation="CenterOwner"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent">
 
-    <Border CornerRadius="12" Background="#2d2d30" BorderBrush="#007ACC" BorderThickness="2">
+    <Border CornerRadius="12" Background="{StaticResource PrimaryBackground}" BorderBrush="{StaticResource AccentPurple}" BorderThickness="1.5">
+        <Border.Effect>
+            <DropShadowEffect ShadowDepth="0" BlurRadius="20" Color="#000000" Opacity="0.5"/>
+        </Border.Effect>
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
