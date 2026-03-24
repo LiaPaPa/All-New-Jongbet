@@ -70,5 +70,9 @@ namespace All_New_Jongbet
         // [NEW] 매수 이후 최고가 저장
         private double _maxPriceSincePurchase;
         public double MaxPriceSincePurchase { get => _maxPriceSincePurchase; set { _maxPriceSincePurchase = value; OnPropertyChanged(); } }
+
+        // [NEW] 매수 이후 최저가 저장
+        private double _minPriceSincePurchase;
+        public double MinPriceSincePurchase { get => _minPriceSincePurchase; set { _minPriceSincePurchase = value; OnPropertyChanged(); } }
     }
 }

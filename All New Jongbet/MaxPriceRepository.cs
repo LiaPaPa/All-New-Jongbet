@@ -9,15 +9,19 @@ namespace All_New_Jongbet
     public static class MaxPriceRepository
     {
         private static readonly string FilePath;
+        private static readonly string MinFilePath;
         // Key: {AccountNumber}_{StockCode}
         private static ConcurrentDictionary<string, double> _maxPriceMap;
+        private static ConcurrentDictionary<string, double> _minPriceMap;
 
         static MaxPriceRepository()
         {
             string folderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data");
             Directory.CreateDirectory(folderPath);
             FilePath = Path.Combine(folderPath, "max_prices.json");
+            MinFilePath = Path.Combine(folderPath, "min_prices.json");
             _maxPriceMap = new ConcurrentDictionary<string, double>();
+            _minPriceMap = new ConcurrentDictionary<string, double>();
         }
 
         public static void Load()
@@ -39,18 +43,39 @@ namespace All_New_Jongbet
                     Logger.Instance.Add($"[오류] MaxPrice 파일 로딩 실패: {ex.Message}");
                 }
             }
+
+            if (File.Exists(MinFilePath))
+            {
+                try
+                {
+                    string json = File.ReadAllText(MinFilePath);
+                    var dict = JsonConvert.DeserializeObject<Dictionary<string, double>>(json);
+                    if (dict != null)
+                    {
+                        _minPriceMap = new ConcurrentDictionary<string, double>(dict);
+                        Logger.Instance.Add($"매수 최저가 기록 {dict.Count}건을 불러왔습니다.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Instance.Add($"[오류] MinPrice 파일 로딩 실패: {ex.Message}");
+                }
+            }
         }
 
         public static void Save()
         {
             try
             {
-                string json = JsonConvert.SerializeObject(_maxPriceMap, Formatting.Indented);
-                File.WriteAllText(FilePath, json);
+                string maxJson = JsonConvert.SerializeObject(_maxPriceMap, Formatting.Indented);
+                File.WriteAllText(FilePath, maxJson);
+
+                string minJson = JsonConvert.SerializeObject(_minPriceMap, Formatting.Indented);
+                File.WriteAllText(MinFilePath, minJson);
             }
             catch (Exception ex)
             {
-                Logger.Instance.Add($"[오류] MaxPrice 파일 저장 실패: {ex.Message}");
+                Logger.Instance.Add($"[오류] MaxPrice/MinPrice 파일 저장 실패: {ex.Message}");
             }
         }
 
@@ -87,6 +112,37 @@ namespace All_New_Jongbet
             }
         }
 
+        public static double GetMinPrice(string accountNumber, string stockCode, double currentPrice)
+        {
+            string key = $"{accountNumber}_{stockCode}";
+            if (_minPriceMap.TryGetValue(key, out double minPrice))
+            {
+                return minPrice;
+            }
+            return currentPrice;
+        }
+
+        public static void UpdateMinPrice(string accountNumber, string stockCode, double currentPrice, double defaultInitialPrice)
+        {
+            string key = $"{accountNumber}_{stockCode}";
+            bool isUpdated = false;
+
+            _minPriceMap.AddOrUpdate(key, Math.Min(currentPrice, defaultInitialPrice), (k, oldMin) =>
+            {
+                if (currentPrice < oldMin)
+                {
+                    isUpdated = true;
+                    return currentPrice;
+                }
+                return oldMin;
+            });
+
+            if (isUpdated || !_minPriceMap.ContainsKey(key))
+            {
+                Save();
+            }
+        }
+
         public static void Cleanup(string accountNumber, HashSet<string> currentHoldingStockCodes)
         {
             bool isChanged = false;
@@ -98,6 +154,7 @@ namespace All_New_Jongbet
                     if (!currentHoldingStockCodes.Contains(stockCode))
                     {
                         _maxPriceMap.TryRemove(key, out _);
+                        _minPriceMap.TryRemove(key, out _);
                         isChanged = true;
                     }
                 }
@@ -106,7 +163,7 @@ namespace All_New_Jongbet
             if (isChanged)
             {
                 Save();
-                Logger.Instance.Add($"[{accountNumber}] 보유하지 않은 종목의 최고가 기록을 초기화(Cleanup) 했습니다.");
+                Logger.Instance.Add($"[{accountNumber}] 보유하지 않은 종목의 최고가/최저가 기록을 초기화(Cleanup) 했습니다.");
             }
         }
     }

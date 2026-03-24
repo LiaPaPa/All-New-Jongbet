@@ -20,10 +20,9 @@ namespace All_New_Jongbet
         public SystemSettingsPage(MainWindow mainWindow, ObservableCollection<AccountInfo> accounts, ObservableCollection<StrategyInfo> strategies)
         {
             InitializeComponent();
-            this.DataContext = this;
             _mainWindow = mainWindow;
-            AccountsDataGrid.ItemsSource = accounts;
             StrategyList = strategies;
+            this.DataContext = this;
 
             UpdateAllButtonStates();
         }
@@ -85,6 +84,8 @@ namespace All_New_Jongbet
                 };
 
                 StrategyList.Add(newStrategy);
+                StrategyMatchingDataGrid.Items.Refresh(); // [NEW] 강제 UI 갱신
+
                 Logger.Instance.Add($"{newStrategy.StrategyNumber}번 신규 전략을 리스트에 추가했습니다. (상태: Inactive)");
                 UpdateAllButtonStates();
             }
@@ -121,6 +122,8 @@ namespace All_New_Jongbet
             if (StrategyMatchingDataGrid.SelectedItem is StrategyInfo selectedStrategy)
             {
                 StrategyList.Remove(selectedStrategy);
+                StrategyMatchingDataGrid.Items.Refresh(); // [NEW] 강제 UI 갱신
+
                 StrategyRepository.Save(StrategyList);
                 UpdateAllButtonStates();
             }

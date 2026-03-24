@@ -61,7 +61,19 @@ namespace All_New_Jongbet
             ActiveStrategyListView = CollectionViewSource.GetDefaultView(_masterStrategyList);
             ActiveStrategyListView.Filter = item => (item as StrategyInfo)?.Status == "Active";
 
-            if (_masterStrategyList.Any(s => s.Status == "Active"))
+            this.IsVisibleChanged += (s, e) =>
+            {
+                if ((bool)e.NewValue)
+                {
+                    ActiveStrategyListView.Refresh();
+                    if (_masterStrategyList.Any(st => st.Status == "Active") && StrategyListDataGrid.SelectedItem == null)
+                    {
+                        StrategyListDataGrid.SelectedIndex = 0;
+                    }
+                }
+            };
+
+            if (_masterStrategyList.Any(st => st.Status == "Active"))
             {
                 StrategyListDataGrid.SelectedIndex = 0;
             }

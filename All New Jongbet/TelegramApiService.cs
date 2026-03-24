@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Net.Http;
 using System.Threading;
@@ -22,7 +22,9 @@ namespace All_New_Jongbet
                 new JObject { { "command", "account_status" }, { "description", "전체 계좌 현황 받기" } },
                 new JObject { { "command", "asset_trend" }, { "description", "자산 추이 차트 받기" } },
                 new JObject { { "command", "start_trading" }, { "description", "자동매매 시작" } },
-                new JObject { { "command", "stop_trading" }, { "description", "자동매매 중지" } }
+                new JObject { { "command", "stop_trading" }, { "description", "자동매매 중지" } },
+                new JObject { { "command", "time_settings" }, { "description", "거래시간 설정 변경" } },
+                new JObject { { "command", "weight_settings" }, { "description", "매수비중 설정 변경" } }
             );
 
             var content = new JObject { { "commands", commands } };
@@ -121,7 +123,8 @@ namespace All_New_Jongbet
             var messageData = new JObject
             {
                 { "chat_id", chatId },
-                { "text", message }
+                { "text", message },
+                { "parse_mode", "HTML" }
             };
 
             if (showKeyboard)
@@ -130,7 +133,8 @@ namespace All_New_Jongbet
                 {
                     { "keyboard", new JArray(
                         new JArray("Daily Report", "Account Status", "Asset Trend"),
-                        new JArray("Start", "Stop")
+                        new JArray("Start", "Stop"),
+                        new JArray("Time Set", "Weight Set")
                       )
                     },
                     { "resize_keyboard", true }

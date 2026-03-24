@@ -52,7 +52,7 @@
                                 <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
                             <TextBlock Grid.Row="0" Text="Strategy List" Style="{StaticResource CardTitle}" FontSize="16" Foreground="{StaticResource PrimaryText}"/>
-                            <DataGrid Grid.Row="1" x:Name="StrategyListDataGrid" ItemsSource="{Binding ActiveStrategyListView}" SelectionMode="Single" SelectionChanged="StrategyListDataGrid_SelectionChanged" Margin="0,10,0,0" MaxHeight="300" EnableRowVirtualization="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+                            <DataGrid Grid.Row="1" x:Name="StrategyListDataGrid" ItemsSource="{Binding DataContext.ActiveStrategyListView, RelativeSource={RelativeSource AncestorType=UserControl}}" SelectionMode="Single" SelectionChanged="StrategyListDataGrid_SelectionChanged" Margin="0,10,0,0" MaxHeight="300" EnableRowVirtualization="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="No" Binding="{Binding StrategyNumber}" Width="50" CellStyle="{StaticResource CenterAlignedCellStyle}"/>
                                     <DataGridTextColumn Header="Account" Binding="{Binding AccountNumber}" Width="*"/>

@@ -64,10 +64,15 @@ namespace All_New_Jongbet
         private int _buyStartRelativeOffsetMinutes = 0;
         public int BuyStartRelativeOffsetMinutes { get => _buyStartRelativeOffsetMinutes; set { _buyStartRelativeOffsetMinutes = value; OnPropertyChanged(); } }
 
-        // CHANGED: string에서 int로 변경
-        public int BuyStartHour { get; set; } = 9;
-        public int BuyStartMinute { get; set; } = 0;
-        public int BuyStartSecond { get; set; } = 0;
+        // CHANGED: string에서 int로 변경 (텔레그램 연동 갱신을 위해 INPC 추가)
+        private int _buyStartHour = 9;
+        public int BuyStartHour { get => _buyStartHour; set { _buyStartHour = value; OnPropertyChanged(); } }
+
+        private int _buyStartMinute = 0;
+        public int BuyStartMinute { get => _buyStartMinute; set { _buyStartMinute = value; OnPropertyChanged(); } }
+
+        private int _buyStartSecond = 0;
+        public int BuyStartSecond { get => _buyStartSecond; set { _buyStartSecond = value; OnPropertyChanged(); } }
 
         private double _buyWeight = 10.0;
         public double BuyWeight { get => _buyWeight; set { _buyWeight = value; OnPropertyChanged(); } }
@@ -116,10 +121,15 @@ namespace All_New_Jongbet
         private int _sellStartRelativeOffsetMinutes = 0;
         public int SellStartRelativeOffsetMinutes { get => _sellStartRelativeOffsetMinutes; set { _sellStartRelativeOffsetMinutes = value; OnPropertyChanged(); } }
 
-        // CHANGED: string에서 int로 변경
-        public int SellStartHour { get; set; } = 9;
-        public int SellStartMinute { get; set; } = 0;
-        public int SellStartSecond { get; set; } = 0;
+        // CHANGED: string에서 int로 변경 (텔레그램 연동 갱신을 위해 INPC 추가)
+        private int _sellStartHour = 9;
+        public int SellStartHour { get => _sellStartHour; set { _sellStartHour = value; OnPropertyChanged(); } }
+
+        private int _sellStartMinute = 0;
+        public int SellStartMinute { get => _sellStartMinute; set { _sellStartMinute = value; OnPropertyChanged(); } }
+
+        private int _sellStartSecond = 0;
+        public int SellStartSecond { get => _sellStartSecond; set { _sellStartSecond = value; OnPropertyChanged(); } }
 
         // 매도 종료시간 모드 설정
         private string _sellEndTimeMode = "절대시간";
@@ -145,9 +155,14 @@ namespace All_New_Jongbet
         private int _sellEndRelativeOffsetMinutes = -10;
         public int SellEndRelativeOffsetMinutes { get => _sellEndRelativeOffsetMinutes; set { _sellEndRelativeOffsetMinutes = value; OnPropertyChanged(); } }
 
-        public int SellEndHour { get; set; } = 15;
-        public int SellEndMinute { get; set; } = 20;
-        public int SellEndSecond { get; set; } = 0;
+        private int _sellEndHour = 15;
+        public int SellEndHour { get => _sellEndHour; set { _sellEndHour = value; OnPropertyChanged(); } }
+
+        private int _sellEndMinute = 20;
+        public int SellEndMinute { get => _sellEndMinute; set { _sellEndMinute = value; OnPropertyChanged(); } }
+
+        private int _sellEndSecond = 0;
+        public int SellEndSecond { get => _sellEndSecond; set { _sellEndSecond = value; OnPropertyChanged(); } }
 
         private string _targetPriceType = "단순";
         public string TargetPriceType
@@ -208,10 +223,15 @@ namespace All_New_Jongbet
         private int _liquidationRelativeOffsetMinutes = -10;
         public int LiquidationRelativeOffsetMinutes { get => _liquidationRelativeOffsetMinutes; set { _liquidationRelativeOffsetMinutes = value; OnPropertyChanged(); } }
 
-        // CHANGED: string에서 int로 변경
-        public int LiquidationHour { get; set; } = 15;
-        public int LiquidationMinute { get; set; } = 20;
-        public int LiquidationSecond { get; set; } = 0;
+        // CHANGED: string에서 int로 변경 (텔레그램 연동 갱신을 위해 INPC 추가)
+        private int _liquidationHour = 15;
+        public int LiquidationHour { get => _liquidationHour; set { _liquidationHour = value; OnPropertyChanged(); } }
+
+        private int _liquidationMinute = 20;
+        public int LiquidationMinute { get => _liquidationMinute; set { _liquidationMinute = value; OnPropertyChanged(); } }
+
+        private int _liquidationSecond = 0;
+        public int LiquidationSecond { get => _liquidationSecond; set { _liquidationSecond = value; OnPropertyChanged(); } }
 
         private bool _useReboundCut = false;
         public bool UseReboundCut { get => _useReboundCut; set { _useReboundCut = value; OnPropertyChanged(); } }

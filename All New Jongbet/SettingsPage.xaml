@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="All_New_Jongbet.SettingsPage"
+<UserControl x:Class="All_New_Jongbet.SettingsPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
@@ -44,7 +44,7 @@
                             </Grid.RowDefinitions>
 
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="알림 활성화" VerticalAlignment="Center" Foreground="{StaticResource SecondaryText}"/>
-                            <ToggleButton x:Name="EnableToggle" Grid.Row="0" Grid.Column="1" HorizontalAlignment="Left" Margin="20,0,0,0"/>
+                            <ToggleButton x:Name="EnableToggle" Grid.Row="0" Grid.Column="1" HorizontalAlignment="Left" Margin="20,0,0,0" Click="EnableToggle_Click"/>
 
                             <TextBlock Grid.Row="1" Grid.Column="0" Text="봇 토큰 (Token)" VerticalAlignment="Center" Margin="0,15,0,0" Foreground="{StaticResource SecondaryText}"/>
                             <TextBox x:Name="BotTokenTextBox" Grid.Row="1" Grid.Column="1" Style="{StaticResource SettingTextBoxStyle}" Margin="20,15,0,0"/>

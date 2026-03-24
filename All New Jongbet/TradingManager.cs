@@ -16,15 +16,27 @@ namespace All_New_Jongbet
         private readonly KiwoomApiService _apiService;
         private readonly ObservableCollection<StrategyInfo> _strategies;
         private readonly ObservableCollection<AccountInfo> _accountList;
+        private bool _isTestMode = false;
+        public bool IsTestMode { get => _isTestMode; set { _isTestMode = value; } }
+
+        private readonly HashSet<string> _todayBoughtStocks = new HashSet<string>(); // 당일 매수 종목 추적
+        public HashSet<string> TodayBoughtStocks => _todayBoughtStocks;
+
+        // [NEW] 텔레그램 알림용 신규 매수대상 종목
+        public HashSet<string> DisplaySelectedBuyTargets { get; private set; } = new HashSet<string>();
+
+        // [NEW] 텔레그램 알림용 실제 매수 주문 실행 종목
+        public HashSet<string> DisplayOrderedBuyTargets { get; private set; } = new HashSet<string>();
+
+        private readonly ConcurrentDictionary<string, DateTime> _sellOrderTimestamps = new ConcurrentDictionary<string, DateTime>();
+        private readonly ConcurrentDictionary<string, DateTime> _buyOrderTimestamps = new ConcurrentDictionary<string, DateTime>(); // 매도 주문 시간 기록
+
+        public bool IsTradingEnabled { get; private set; } = true;
+
         private readonly ApiRequestScheduler _apiRequestScheduler;
         private readonly Func<ClientWebSocket, string, object, Task<JObject>> _sendWsRequestAsync;
 
         private Dictionary<int, bool> _liquidationExecuted;
-        private ConcurrentDictionary<string, DateTime> _sellOrderTimestamps = new ConcurrentDictionary<string, DateTime>(); // 매도 주문 시간 기록
-        private HashSet<string> _todayBoughtStocks = new HashSet<string>(); // 당일 매수 종목 추적
-
-        public bool IsTradingEnabled { get; private set; } = true;
-        public bool IsTestMode { get; set; } = false; // Test Mode Property
 
         // [MODIFIED] 생성자에 MainWindow 추가
         public TradingManager(MainWindow mainWindow, KiwoomApiService apiService, ObservableCollection<StrategyInfo> strategies, ObservableCollection<AccountInfo> accountList, ApiRequestScheduler scheduler, Func<ClientWebSocket, string, object, Task<JObject>> sendWsRequestFunc)
@@ -217,7 +229,7 @@ namespace All_New_Jongbet
                     int quantity = IsTestMode ? 0 : stock.TradableQuantity; // Test Mode: 0 quantity
                     if (IsTestMode) Logger.Instance.Add($"[TEST MODE] 청산 매도 주문 - 종목: {stock.StockName}, 수량: 0 (Original: {stock.TradableQuantity})");
 
-                    await _apiService.SendSellOrderAsync(account, stock.StockCode, quantity, 0, liquidationMethod);
+                    await _apiService.SendSellOrderAsync(account, stock.StockCode, quantity, stock.CurrentPrice, liquidationMethod);
                     await Task.Delay(300);
                 }
             }
@@ -240,8 +252,18 @@ namespace All_New_Jongbet
             var detailedStocks = await FetchAllStockDataAsync(searchedStocks);
             var prioritizedStocks = CalculatePriorityAndSort(detailedStocks, strategy.TradeSettings.Buy.Priority);
             var stocksToOrder = CalculateOrderQuantity(prioritizedStocks, account, strategy.TradeSettings.Buy);
+            
+            // [NEW] 텔레그램 알림 보고서를 위한 기록 캐싱 (우선순위 상위 목록 전체)
+            foreach (var s in prioritizedStocks)
+            {
+                DisplaySelectedBuyTargets.Add(s.StockName);
+            }
+
             foreach (var stock in stocksToOrder)
             {
+                // [NEW] 실제 매수 주문 실행 종목 기록
+                DisplayOrderedBuyTargets.Add(stock.StockName);
+
                 Logger.Instance.Add($" -> [매수 주문 시도] 종목: {stock.StockName}, 가격: {stock.OrderPrice:N0}, 수량: {stock.OrderQuantity}");
                 await _apiService.SendBuyOrderAsync(account, stock.StockCode, stock.OrderQuantity, stock.OrderPrice, "5"); // 5 = 조건부지정가
                 _todayBoughtStocks.Add(stock.StockCode); // 당일 매수 종목 추적
@@ -433,14 +455,11 @@ namespace All_New_Jongbet
                     if (sellSettings.StopLossPreservePrice > 0)
                     {
                         // 보존가 로직: 최고가가 감시 시작가(목표가) 상회 후 보존가 하회 시
-                        // 1분 단위 정각 감시 (틱 기반이므로 0~10초 사이에 들어온 틱을 통해 정각 확인)
+                        // 즉시 감시: 초 제한 없이 체결되는 즉시 보존가 하회 검사 수행 (초단위 제한 로직 삭제)
                         if (stock.MaxPriceSincePurchase >= stopLossTargetPrice && currentPrice <= stopLossPreservePrice)
                         {
-                            if (DateTime.Now.Second < 10)
-                            {
-                                shouldSell = true;
-                                reason = $"스탑로스 보존가({stopLossPreservePrice:N0}, {sellSettings.StopLossPreservePrice}%) 하회 (최고가 {stock.MaxPriceSincePurchase:N0} 달성 후)";
-                            }
+                            shouldSell = true;
+                            reason = $"스탑로스 보존가({stopLossPreservePrice:N0}, {sellSettings.StopLossPreservePrice}%) 하회 (최고가 {stock.MaxPriceSincePurchase:N0} 달성 후)";
                         }
                     }
                     else
@@ -463,7 +482,8 @@ namespace All_New_Jongbet
             // 반등컷 로직 (Bounce Cut)
             if (!shouldSell && sellSettings.UseReboundCut)
             {
-                double lowPrice = stock.LowPrice;
+                // [MODIFIED] 당일 최저가가 아닌 매수 이후 최저가를 반등컷 산정 기준으로 설정
+                double lowPrice = stock.MinPriceSincePurchase > 0 ? stock.MinPriceSincePurchase : stock.CurrentPrice;
 
                 // 최저 수익률 = (저가 - 보유가) / 보유가 * 100
                 double minProfitRate = ((lowPrice - purchasePrice) / purchasePrice) * 100.0;
@@ -514,7 +534,7 @@ namespace All_New_Jongbet
                 int quantity = IsTestMode ? 0 : stock.TradableQuantity;
                 if (IsTestMode) Logger.Instance.Add($"[TEST MODE] 매도 주문 - 종목: {stock.StockName}, 수량: 0 (Original: {stock.TradableQuantity})");
 
-                await _apiService.SendSellOrderAsync(account, stock.StockCode, quantity, 0, orderTypeCode);
+                await _apiService.SendSellOrderAsync(account, stock.StockCode, quantity, currentPrice, orderTypeCode);
             }
         }
 

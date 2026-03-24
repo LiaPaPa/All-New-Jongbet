@@ -685,7 +685,7 @@ namespace All_New_Jongbet
             foreach (var account in accountsHoldingStock)
             {
                 var stockToUpdate = account.HoldingStockList.First(s => s.StockCode.TrimStart('A') == stockCode);
-                Dispatcher.Invoke(() =>
+                Dispatcher.InvokeAsync(() =>
                 {
                     stockToUpdate.BestAskPrice = bestAskPrice;
                     stockToUpdate.BestBidPrice = bestBidPrice;
@@ -711,13 +711,22 @@ namespace All_New_Jongbet
                 foreach (var account in accountsHoldingStock)
                 {
                     var stockToUpdate = account.HoldingStockList.First(s => s.StockCode.TrimStart('A') == stockCode);
-                    Dispatcher.Invoke(() =>
+                    Dispatcher.InvokeAsync(() =>
                     {
                         stockToUpdate.CurrentPrice = currentPrice;
                         stockToUpdate.FluctuationRate = fluctuationRate;
                         stockToUpdate.CumulativeVolume = cumulativeVolume;
                         stockToUpdate.HighPrice = highPrice;
                         stockToUpdate.LowPrice = lowPrice;
+
+                        // [NEW] 매수 이후 최고가/최저가 업데이트
+                        MaxPriceRepository.UpdateMaxPrice(account.AccountNumber, stockCode, currentPrice);
+                        stockToUpdate.MaxPriceSincePurchase = MaxPriceRepository.GetMaxPrice(account.AccountNumber, stockCode, currentPrice);
+
+                        double initialMin = stockToUpdate.PurchasePrice > 0 ? stockToUpdate.PurchasePrice : currentPrice;
+                        MaxPriceRepository.UpdateMinPrice(account.AccountNumber, stockCode, currentPrice, initialMin);
+                        stockToUpdate.MinPriceSincePurchase = MaxPriceRepository.GetMinPrice(account.AccountNumber, stockCode, initialMin);
+
                         if (stockToUpdate.HoldingQuantity > 0)
                         {
                             stockToUpdate.EvaluationAmount = currentPrice * stockToUpdate.HoldingQuantity;
@@ -752,8 +761,8 @@ namespace All_New_Jongbet
                 int.TryParse(values["900"]?.ToString(), out int orderQuantity);
                 int.TryParse(values["902"]?.ToString(), out int unfilledQuantity);
                 double.TryParse(values["901"]?.ToString(), out double orderPrice);
-                int.TryParse(values["903"]?.ToString(), out int executedQuantity);
-                double.TryParse(values["904"]?.ToString(), out double executedPrice);
+                int.TryParse(values["911"]?.ToString(), out int executedQuantity); // 911: 체결량 (수정: 구 903=체결금액 오파싱)
+                double.TryParse(values["910"]?.ToString(), out double executedPrice); // 910: 체결가 (수정: 구 904=주문번호 오파싱)
                 string orderTypeCode = values["905"]?.ToString();
                 string timeHHMMSS = values["908"]?.ToString();
                 string formattedTime = timeHHMMSS;
@@ -764,7 +773,7 @@ namespace All_New_Jongbet
 
                 Logger.Instance.Add($"[실시간 주문처리] 계좌:{account.AccountNumber}, 주문번호:{orderNumber}, 상태:{orderStatusFromApi}, 체결수량:{executedQuantity}, 미체결:{unfilledQuantity}");
 
-                Dispatcher.Invoke(async () =>
+                Dispatcher.InvokeAsync(async () =>
                 {
                     var existingOrder = OrderQueList.FirstOrDefault(o => o.OrderNumber == orderNumber);
                     if (existingOrder != null)
@@ -860,7 +869,7 @@ namespace All_New_Jongbet
                 string stockCode = values["9001"]?.ToString();
                 if (string.IsNullOrEmpty(stockCode)) return;
                 Logger.Instance.Add($"[실시간 잔고변경] 계좌:{account.AccountNumber}, 종목:{stockCode}");
-                Dispatcher.Invoke(() =>
+                Dispatcher.InvokeAsync(() =>
                 {
                     _apiRequestScheduler.EnqueueRequest(async (acc) =>
                     {
@@ -937,10 +946,76 @@ namespace All_New_Jongbet
                 Logger.Instance.Add("[텔레그램 알림] 봇 토큰 또는 채팅 ID가 없어 메시지를 보낼 수 없습니다.");
                 return;
             }
-            Logger.Instance.Add("[텔레그램 알림] 계좌 현황 요약 메시지를 준비합니다.");
+            Logger.Instance.Add("[텔레그램 알림] 계좌 종합 데일리 보고서 메시지를 준비합니다.");
+            
             double totalAssets = AccountManageList.Sum(acc => acc.EstimatedDepositAsset);
-            double totalProfitLoss = AccountManageList.Sum(acc => acc.TotalEvaluationProfitLoss);
-            string message = $"🔔 Jongbet 데일리 리포트 ({DateTime.Now:yyyy-MM-dd HH:mm})\n\n- 총 자산: {totalAssets:N0}원\n- 총 평가손익: {totalProfitLoss:N0}원\n\n오늘도 좋은 하루 되세요!";
+            
+            // 당일 손익 계산 (어제 자산과 비교)
+            double prevTotalAssets = 0;
+            double dailyChange = AccountManageList.Sum(acc =>
+            {
+                if (acc.DailyAssetList != null && acc.DailyAssetList.Count >= 2)
+                {
+                    var today = acc.DailyAssetList.Last();
+                    var yesterday = acc.DailyAssetList.ElementAt(acc.DailyAssetList.Count - 2);
+                    prevTotalAssets += yesterday.EstimatedAsset;
+                    return today.EstimatedAsset - yesterday.EstimatedAsset;
+                }
+                return 0;
+            });
+            double dailyChangeRate = prevTotalAssets > 0 ? (dailyChange / prevTotalAssets) * 100.0 : 0;
+            string dailyRateSign = dailyChangeRate >= 0 ? "+" : "";
+
+            var holdings = AccountManageList.SelectMany(a => a.HoldingStockList ?? new ObservableCollection<HoldingStock>()).ToList();
+            int holdingCount = holdings.Count;
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"🔔 Jongbet 데일리 알림 보고서 ({DateTime.Now:yyyy-MM-dd HH:mm})\n");
+            
+            sb.AppendLine($"💰 [계좌 요약]");
+            sb.AppendLine($"- 총 잔고: {totalAssets:N0}원");
+            sb.AppendLine($"<b>- 당일 손익: {dailyChange:N0}원 ({dailyRateSign}{dailyChangeRate:F2}%)</b>");
+            sb.AppendLine($"- 보유 종목 수: {holdingCount}개\n");
+            
+            sb.AppendLine($"📂 [보유종목 리스트]");
+            if (holdingCount > 0)
+            {
+                foreach (var stock in holdings)
+                {
+                    string rateSign = stock.ProfitRate >= 0 ? "+" : "";
+                    sb.AppendLine($" • {stock.StockName} ({rateSign}{stock.ProfitRate:F2}%)");
+                }
+            }
+            else
+            {
+                sb.AppendLine(" • 없음");
+            }
+            sb.AppendLine();
+
+            sb.AppendLine($"🎯 [신규 매수대상 (조건검색 상위)]");
+            if (_tradingManager != null && _tradingManager.DisplaySelectedBuyTargets.Any())
+            {
+                foreach (var name in _tradingManager.DisplaySelectedBuyTargets)
+                    sb.AppendLine($" • {name}");
+            }
+            else
+            {
+                sb.AppendLine(" • 매수대상 없음");
+            }
+            sb.AppendLine();
+
+            sb.AppendLine($"🛒 [실제 매수 주문 실행 종목]");
+            if (_tradingManager != null && _tradingManager.DisplayOrderedBuyTargets.Any())
+            {
+                foreach (var name in _tradingManager.DisplayOrderedBuyTargets)
+                    sb.AppendLine($" • {name}");
+            }
+            else
+            {
+                sb.AppendLine(" • 주문 종목 없음");
+            }
+
+            string message = sb.ToString();
             await _telegramService.SendMessageAsync(botToken, chatId, message);
         }
 
@@ -960,11 +1035,115 @@ namespace All_New_Jongbet
             await _telegramService.SendMessageAsync(botToken, chatId, welcomeMessage, true);
         }
 
+        private Dictionary<string, string> _telegramInputStates = new Dictionary<string, string>();
+
         private async void HandleTelegramMessage(string chatId, string command)
         {
             if (chatId != Settings.Default.TelegramChatId) return;
             string botToken = Settings.Default.TelegramBotToken;
             string responseMessage = "알 수 없는 명령입니다.";
+
+            // 상태 체크 및 입력 처리
+            if (command != null && _telegramInputStates.TryGetValue(chatId, out string state))
+            {
+                if (state == "WAITING_FOR_TIMES")
+                {
+                    if (command == "취소") {
+                        _telegramInputStates.Remove(chatId);
+                        responseMessage = "입력이 취소되었습니다.";
+                    }
+                    else {
+                        var parts = command.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                        if (parts.Length == 4)
+                        {
+                            try {
+                               foreach (var strategy in StrategyList)
+                               {
+                                   strategy.TradeSettings.Buy.BuyStartTimeMode = "절대시간";
+                                   strategy.TradeSettings.Buy.BuyStartHour = int.Parse(parts[0].Substring(0, 2));
+                                   strategy.TradeSettings.Buy.BuyStartMinute = int.Parse(parts[0].Substring(2, 2));
+                                   strategy.TradeSettings.Buy.BuyStartSecond = int.Parse(parts[0].Substring(4, 2));
+
+                                   strategy.TradeSettings.Sell.SellStartTimeMode = "절대시간";
+                                   strategy.TradeSettings.Sell.SellStartHour = int.Parse(parts[1].Substring(0, 2));
+                                   strategy.TradeSettings.Sell.SellStartMinute = int.Parse(parts[1].Substring(2, 2));
+                                   strategy.TradeSettings.Sell.SellStartSecond = int.Parse(parts[1].Substring(4, 2));
+
+                                   strategy.TradeSettings.Sell.SellEndTimeMode = "절대시간";
+                                   strategy.TradeSettings.Sell.SellEndHour = int.Parse(parts[2].Substring(0, 2));
+                                   strategy.TradeSettings.Sell.SellEndMinute = int.Parse(parts[2].Substring(2, 2));
+                                   strategy.TradeSettings.Sell.SellEndSecond = int.Parse(parts[2].Substring(4, 2));
+
+                                   strategy.TradeSettings.Sell.LiquidationTimeMode = "절대시간";
+                                   strategy.TradeSettings.Sell.LiquidationHour = int.Parse(parts[3].Substring(0, 2));
+                                   strategy.TradeSettings.Sell.LiquidationMinute = int.Parse(parts[3].Substring(2, 2));
+                                   strategy.TradeSettings.Sell.LiquidationSecond = int.Parse(parts[3].Substring(4, 2));
+                               }
+                               StrategyRepository.Save(StrategyList);
+                               SaveAllTradeSettings();
+                               responseMessage = "✅ 거래시간이 성공적으로 변경되었습니다.";
+                               _telegramInputStates.Remove(chatId);
+                            } catch {
+                               responseMessage = "🛑 시간 형식이 올바르지 않습니다. (예: 090000 090000 152000 152000)\n다시 입력해주세요. (취소하려면 '취소' 입력)";
+                            }
+                        }
+                        else
+                        {
+                            responseMessage = "🛑 4개의 시간을 띄어쓰기로 구분하여 입력해주세요. (취소하려면 '취소' 입력)";
+                        }
+                    }
+                    await _telegramService.SendMessageAsync(botToken, chatId, responseMessage);
+                    return;
+                }
+                else if (state == "WAITING_FOR_BUY_WEIGHT")
+                {
+                    if (command == "취소") {
+                        _telegramInputStates.Remove(chatId);
+                        responseMessage = "입력이 취소되었습니다.";
+                    }
+                    else if (double.TryParse(command, out double newWeight))
+                    {
+                        foreach (var strategy in StrategyList)
+                        {
+                            strategy.TradeSettings.Buy.BuyWeight = newWeight;
+                        }
+                        StrategyRepository.Save(StrategyList);
+                        SaveAllTradeSettings();
+                        responseMessage = $"✅ 매수비중이 {newWeight}%로 변경되었습니다.";
+                        _telegramInputStates.Remove(chatId);
+                    }
+                    else
+                    {
+                        responseMessage = "🛑 올바른 숫자를 입력해주세요. (예: 10 또는 5.5)\n취소하려면 '취소' 입력";
+                    }
+                    await _telegramService.SendMessageAsync(botToken, chatId, responseMessage);
+                    return;
+                }
+            }
+
+            // [NEW] 개별 전략의 TradeSettings(별도 파일) 모두 일괄 저장
+            void SaveAllTradeSettings()
+            {
+                try
+                {
+                    string settingsFolderPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "TradeSettings");
+                    System.IO.Directory.CreateDirectory(settingsFolderPath);
+
+                    foreach (var strategy in StrategyList)
+                    {
+                        if (strategy.TradeSettings != null)
+                        {
+                            string filePath = System.IO.Path.Combine(settingsFolderPath, $"settings_{strategy.TradeSettings.StrategyNumber}.json");
+                            string json = Newtonsoft.Json.JsonConvert.SerializeObject(strategy.TradeSettings, Newtonsoft.Json.Formatting.Indented);
+                            System.IO.File.WriteAllText(filePath, json);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Instance.Add($"텔레그램 일괄 설정 저장 중 오류 발생: {ex.Message}");
+                }
+            }
 
             // 버튼 텍스트 → 명령어 변환
             switch (command?.Trim().ToLower())
@@ -974,23 +1153,29 @@ namespace All_New_Jongbet
                 case "asset trend": command = "/asset_trend"; break;
                 case "start": command = "/start_trading"; break;
                 case "stop": command = "/stop_trading"; break;
+                case "거래시간 설정": command = "/time_settings"; break;
+                case "매수비중 설정": command = "/weight_settings"; break;
             }
 
             switch (command)
             {
                 case "/daily_report":
                     double totalAssets = AccountManageList.Sum(acc => acc.EstimatedDepositAsset);
+                    double prevTotalForReport = 0;
                     double dailyChange = AccountManageList.Sum(acc =>
                     {
                         if (acc.DailyAssetList != null && acc.DailyAssetList.Count >= 2)
                         {
                             var today = acc.DailyAssetList.Last();
                             var yesterday = acc.DailyAssetList.ElementAt(acc.DailyAssetList.Count - 2);
+                            prevTotalForReport += yesterday.EstimatedAsset;
                             return today.EstimatedAsset - yesterday.EstimatedAsset;
                         }
                         return 0;
                     });
-                    responseMessage = $"📊 데일리 리포트 ({DateTime.Now:MM-dd HH:mm})\n\n- 총 자산: {totalAssets:N0}원\n- 당일 손익: {dailyChange:N0}원";
+                    double dailyRateForReport = prevTotalForReport > 0 ? (dailyChange / prevTotalForReport) * 100.0 : 0;
+                    string drSign = dailyRateForReport >= 0 ? "+" : "";
+                    responseMessage = $"📊 데일리 리포트 ({DateTime.Now:MM-dd HH:mm})\n\n- 총 자산: {totalAssets:N0}원\n<b>- 당일 손익: {dailyChange:N0}원 ({drSign}{dailyRateForReport:F2}%)</b>";
                     break;
                 case "/account_status":
                     var sb = new StringBuilder();
@@ -1001,19 +1186,24 @@ namespace All_New_Jongbet
                         sb.AppendLine($"- 총자산: {acc.EstimatedDepositAsset:N0}원");
                         sb.AppendLine($"- 평가손익: {acc.TotalEvaluationProfitLoss:N0}원");
                         double accDailyChange = 0;
+                        double accPrevAsset = 0;
                         if (acc.DailyAssetList != null && acc.DailyAssetList.Count >= 2)
                         {
                             var today = acc.DailyAssetList.Last();
                             var yesterday = acc.DailyAssetList.ElementAt(acc.DailyAssetList.Count - 2);
+                            accPrevAsset = yesterday.EstimatedAsset;
                             accDailyChange = today.EstimatedAsset - yesterday.EstimatedAsset;
                         }
-                        sb.AppendLine($"- 당일손익: {accDailyChange:N0}원");
+                        double accDailyRate = accPrevAsset > 0 ? (accDailyChange / accPrevAsset) * 100.0 : 0;
+                        string accSign = accDailyRate >= 0 ? "+" : "";
+                        sb.AppendLine($"<b>- 당일손익: {accDailyChange:N0}원 ({accSign}{accDailyRate:F2}%)</b>");
                         if (acc.HoldingStockList != null && acc.HoldingStockList.Any())
                         {
                             sb.AppendLine("- 보유종목:");
                             foreach (var stock in acc.HoldingStockList)
                             {
-                                sb.AppendLine($"  • {stock.StockName} ({stock.ProfitRate:F2}%)");
+                                string stockSign = stock.ProfitRate >= 0 ? "+" : "";
+                                sb.AppendLine($"  • {stock.StockName} ({stockSign}{stock.ProfitRate:F2}%)");
                             }
                         }
                         else
@@ -1060,6 +1250,37 @@ namespace All_New_Jongbet
                 case "/stop_trading":
                     _tradingManager?.StopTrading();
                     responseMessage = "🛑 오늘 하루 자동매매를 중지합니다.";
+                    break;
+                case "/time_settings":
+                    var firstStrategy = StrategyList.FirstOrDefault();
+                    if (firstStrategy == null) {
+                        responseMessage = "설정된 전략이 없습니다.";
+                        break;
+                    }
+                    string currentSettings = $"[현재 거래시간 설정]\n" +
+                                             $"- 매수시작: {firstStrategy.TradeSettings.Buy.BuyStartHour:D2}{firstStrategy.TradeSettings.Buy.BuyStartMinute:D2}{firstStrategy.TradeSettings.Buy.BuyStartSecond:D2}\n" +
+                                             $"- 매도시작: {firstStrategy.TradeSettings.Sell.SellStartHour:D2}{firstStrategy.TradeSettings.Sell.SellStartMinute:D2}{firstStrategy.TradeSettings.Sell.SellStartSecond:D2}\n" +
+                                             $"- 매도종료: {firstStrategy.TradeSettings.Sell.SellEndHour:D2}{firstStrategy.TradeSettings.Sell.SellEndMinute:D2}{firstStrategy.TradeSettings.Sell.SellEndSecond:D2}\n" +
+                                             $"- 청산시간: {firstStrategy.TradeSettings.Sell.LiquidationHour:D2}{firstStrategy.TradeSettings.Sell.LiquidationMinute:D2}{firstStrategy.TradeSettings.Sell.LiquidationSecond:D2}\n\n" +
+                                             "새로운 시간을 [매수시작 매도시작 매도종료 청산시간] 순서대로 시분초(6자리) 띄어쓰기로 구분하여 입력해주세요.\n" +
+                                             "예: 090000 090500 152000 152000\n" +
+                                             "(취소하려면 '취소'를 입력하세요)";
+                    _telegramInputStates[chatId] = "WAITING_FOR_TIMES";
+                    responseMessage = currentSettings;
+                    break;
+                case "/weight_settings":
+                    var firstStrategyWeight = StrategyList.FirstOrDefault();
+                    if (firstStrategyWeight == null) {
+                        responseMessage = "설정된 전략이 없습니다.";
+                        break;
+                    }
+                    string currentWeight = $"[현재 매수비중 설정]\n" +
+                                           $"- 매수비중: {firstStrategyWeight.TradeSettings.Buy.BuyWeight}%\n\n" +
+                                           "새로운 매수비중을 입력해주세요. (정수 또는 소수점 한자리 지정)\n" +
+                                           "예: 10 또는 5.5\n" +
+                                           "(취소하려면 '취소'를 입력하세요)";
+                    _telegramInputStates[chatId] = "WAITING_FOR_BUY_WEIGHT";
+                    responseMessage = currentWeight;
                     break;
             }
 

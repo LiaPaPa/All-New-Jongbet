@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Windows;
 using System.Windows.Controls;
 using All_New_Jongbet.Properties;
@@ -22,6 +22,22 @@ namespace All_New_Jongbet
             BotTokenTextBox.Text = Settings.Default.TelegramBotToken;
             ChatIdTextBox.Text = Settings.Default.TelegramChatId;
             TimeTextBox.Text = Settings.Default.TelegramNotificationTime;
+        }
+
+        private void EnableToggle_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Settings.Default.IsTelegramNotificationEnabled = EnableToggle.IsChecked ?? false;
+                Settings.Default.Save();
+
+                var mainWindow = (MainWindow)Application.Current.MainWindow;
+                mainWindow.SetupNotificationTimer();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"활성화 상태 저장 중 오류가 발생했습니다: {ex.Message}", "오류");
+            }
         }
 
         private void SaveButton_Click(object sender, RoutedEventArgs e)

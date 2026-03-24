@@ -226,7 +226,7 @@ namespace All_New_Jongbet
         public async Task<bool> SendSellOrderAsync(AccountInfo account, string stockCode, int quantity, double price, string tradeType = "0")
         {
             string sanitizedStockCode = stockCode.TrimStart('A');
-            string orderPrice = tradeType == "3" ? "0" : price.ToString();
+            string orderPrice = tradeType == "3" ? "" : price.ToString();
             var requestBody = new { dmst_stex_tp = "KRX", stk_cd = sanitizedStockCode, ord_qty = quantity.ToString(), ord_uv = orderPrice, trde_tp = tradeType };
             var response = await SendOrderRequestAsync(account, "kt10001", requestBody);
             if (response.IsSuccess)
